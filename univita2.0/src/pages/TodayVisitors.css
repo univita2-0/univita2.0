@@ -1,0 +1,352 @@
+/* ============================================
+   TODAY VISITORS – MODERN MINIMALIST STYLE
+   ============================================ */
+
+.today-visitors-container {
+  padding: 2rem;
+  background: #f9fafb;
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ----- Header ----- */
+.tv-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.tv-header h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.tv-date {
+  color: #6b7280;
+  font-size: 0.875rem;
+  background: white;
+  padding: 0.25rem 1rem;
+  border-radius: 2rem;
+  border: 1px solid #e5e7eb;
+  margin-left: auto;
+}
+
+/* ----- Stats Cards ----- */
+.tv-stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+  flex: 1;
+  min-width: 120px;
+  border: 1px solid #eef2ff;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 0.5rem;
+  letter-spacing: 0.3px;
+}
+
+/* ----- Table Wrapper (Clean, minimal) ----- */
+.visitors-table-wrapper {
+  overflow-x: auto;
+  border-radius: 1.25rem;
+  background: white;
+  border: 1px solid #eef2ff;
+}
+
+.visitors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.visitors-table th,
+.visitors-table td {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.visitors-table th {
+  background: #fafcff;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.visitors-table tr:hover td {
+  background-color: #fefce8;
+}
+
+/* ----- Small text (email) ----- */
+.small-text {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+/* ----- Assignment controls (dropdowns) ----- */
+.assignment-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.action-select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #1f2937;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.action-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+}
+
+/* ----- Assigned info (after check‑in) ----- */
+.assigned-info {
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #4b5563;
+  background: #f9fafb;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border-left: 3px solid #10b981;
+}
+
+/* ----- Status badges ----- */
+.badge-arrived,
+.badge-expected,
+.badge-no-show,
+.badge-returned {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.badge-arrived {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge-expected {
+  background: #fef3c7;
+  color: #92400e;
+}
+.badge-no-show {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.badge-returned {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+/* ----- Action buttons ----- */
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-mark-arrived,
+.btn-mark-no-show,
+.btn-return-tag {
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-mark-arrived {
+  background: #10b981;
+  color: white;
+}
+.btn-mark-arrived:hover:not(:disabled) {
+  background: #059669;
+  transform: scale(1.02);
+}
+.btn-mark-arrived:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-mark-no-show {
+  background: #ef4444;
+  color: white;
+}
+.btn-mark-no-show:hover {
+  background: #dc2626;
+}
+
+.btn-return-tag {
+  background: #f59e0b;
+  color: white;
+}
+.btn-return-tag:hover {
+  background: #d97706;
+}
+
+/* ----- Empty & loading states ----- */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  background: white;
+  border-radius: 1.5rem;
+  color: #9ca3af;
+  border: 1px solid #eef2ff;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
+}
+
+/* ============================================
+   BLE TAGS MODAL – Minimalist
+   ============================================ */
+.btn-view-tags {
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3b82f6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-view-tags:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.ble-inventory-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.btn-refresh-tags {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-refresh-tags:hover {
+  background: #e2e8f0;
+}
+
+.ble-inventory {
+  max-height: 60vh;
+  overflow-y: auto;
+  border-radius: 1rem;
+  border: 1px solid #eef2ff;
+}
+
+.ble-status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.ble-status-table th,
+.ble-status-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.ble-status-table th {
+  background: #fafcff;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.tag-status {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  min-width: 70px;
+  text-align: center;
+}
+
+.tag-status.available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tag-status.in-use {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.loading-tags,
+.empty-tags {
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+}

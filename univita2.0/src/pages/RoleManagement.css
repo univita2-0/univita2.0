@@ -1,0 +1,79 @@
+/* src/pages/RoleManagement.css */
+.role-container {
+  padding: 1.5rem;
+  background: #f8fafc;
+  min-height: 100%;
+}
+.role-header {
+  margin-bottom: 2rem;
+}
+.role-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+.role-header p {
+  color: #64748b;
+}
+.role-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+.role-message.success {
+  background: #dcfce7;
+  color: #15803d;
+}
+.role-message.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.role-table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #eef2f6;
+}
+.role-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.role-table th,
+.role-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+.role-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+}
+.role-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 30px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-admin { background: #dbeafe; color: #1e40af; }
+.badge-hr { background: #dcfce7; color: #15803d; }
+.badge-security { background: #fed7aa; color: #9a3412; }
+.badge-instructor { background: #e0e7ff; color: #3730a3; }
+.role-select {
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.role-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

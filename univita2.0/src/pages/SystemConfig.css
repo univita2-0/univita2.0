@@ -1,0 +1,105 @@
+/* src/pages/SystemConfig.css */
+.config-container {
+  padding: 1.5rem;
+  background: #f8fafc;
+  min-height: 100%;
+}
+.config-header {
+  margin-bottom: 2rem;
+}
+.config-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+.config-header p {
+  color: #64748b;
+}
+.config-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+.config-message.success {
+  background: #dcfce7;
+  color: #15803d;
+}
+.config-message.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.config-card {
+  background: white;
+  border-radius: 24px;
+  padding: 1.5rem;
+  border: 1px solid #eef2f6;
+  max-width: 600px;
+}
+.config-card h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #0f172a;
+}
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.config-field label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #334155;
+}
+.config-field input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  width: 200px;
+}
+.field-hint {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin: 0;
+}
+.config-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.btn-save-config {
+  background: #00897B;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-save-config:hover {
+  background: #00695C;
+}
+.btn-refresh-config {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.6rem 1.2rem;
+  border-radius: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,0 +1,100 @@
+/* src/pages/AuditLogs.css */
+.audit-container {
+  padding: 1.5rem;
+  background: #f8fafc;
+  min-height: 100%;
+}
+
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+.audit-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.btn-export {
+  background: #00897B;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-export:hover {
+  background: #00695C;
+}
+
+.audit-filters {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  background: white;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid #eef2f6;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  padding: 0.4rem 0.8rem;
+  border-radius: 40px;
+}
+.filter-group input, .filter-group select {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.85rem;
+  min-width: 180px;
+}
+.audit-table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #eef2f6;
+}
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.audit-table th,
+.audit-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+.audit-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.85rem;
+}
+.action-badge {
+  background: #e0f2f1;
+  color: #00897B;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.empty-row td {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+}
+.loading-spinner {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+}

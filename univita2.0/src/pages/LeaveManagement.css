@@ -1,0 +1,285 @@
+/* src/pages/LeaveManagement.css */
+.lm-container {
+  background: white;
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.lm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.lm-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lm-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.lm-search {
+  position: relative;
+}
+
+.lm-search .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.lm-search input {
+  padding: 0.5rem 0.5rem 0.5rem 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  width: 240px;
+  transition: border-color 0.2s;
+  background: white;
+}
+
+.lm-search input:focus {
+  outline: none;
+  border-color: #00897b;
+  box-shadow: 0 0 0 2px rgba(0,137,123,0.1);
+}
+
+.btn-refresh {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-refresh:hover {
+  background: #e2e8f0;
+}
+
+/* Tabs */
+.lm-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+.lm-tab {
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.lm-tab.active {
+  color: #00897b;
+}
+
+.lm-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #00897b;
+}
+
+.badge-count {
+  background: #e2e8f0;
+  border-radius: 20px;
+  padding: 0.125rem 0.5rem;
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Table */
+.lm-table-wrapper {
+  overflow-x: auto;
+}
+
+.lm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.lm-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lm-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.employee-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.employee-info small {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.reason-text {
+  max-width: 250px;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.actions-cell {
+  white-space: nowrap;
+}
+
+/* Action buttons */
+.btn-approve,
+.btn-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  margin-right: 0.5rem;
+}
+
+.btn-approve {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #059669;
+}
+
+.btn-approve:hover {
+  background: #d1fae5;
+}
+
+.btn-reject {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+}
+
+.btn-reject:hover {
+  background: #fee2e2;
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-badge.approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.empty-row td {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+}
+
+/* Modal form group (used inside FormalModal) */
+.modal-form-group {
+  margin-top: 1rem;
+}
+
+.modal-form-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #475569;
+  margin-bottom: 0.25rem;
+}
+
+.modal-form-group textarea.modal-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.modal-form-group textarea.modal-input:focus {
+  outline: none;
+  border-color: #00897b;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .lm-container {
+    padding: 1rem;
+  }
+
+  .lm-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lm-search input {
+    width: 100%;
+  }
+
+  .lm-actions {
+    justify-content: space-between;
+  }
+
+  .actions-cell {
+    white-space: normal;
+  }
+
+  .btn-approve,
+  .btn-reject {
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+}

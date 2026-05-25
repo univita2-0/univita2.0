@@ -1,0 +1,236 @@
+/* src/pages/LeaveBalancesManagement.css */
+.lbm-container {
+  background: white;
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.lbm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.lbm-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lbm-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.lbm-year-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  padding: 0.25rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.lbm-year-selector label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.lbm-year-selector select {
+  background: transparent;
+  border: none;
+  font-size: 0.875rem;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+
+.lbm-search {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.lbm-search .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.lbm-search input {
+  width: 100%;
+  max-width: 300px;
+  padding: 0.5rem 0.5rem 0.5rem 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+}
+
+.lbm-search input:focus {
+  outline: none;
+  border-color: #00897b;
+}
+
+.lbm-table-wrapper {
+  overflow-x: auto;
+}
+
+.lbm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.lbm-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lbm-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.btn-view-balances {
+  background: #e0f2f1;
+  border: none;
+  border-radius: 20px;
+  padding: 0.35rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #00897b;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-view-balances:hover {
+  background: #b2dfdb;
+}
+
+.lbm-modal-info {
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: #0f766e;
+  background: #e6f7f3;
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+
+.lbm-balances-table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.lbm-balances-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.lbm-balances-table th,
+.lbm-balances-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.lbm-balances-table th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.balance-input {
+  width: 80px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.balance-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-edit-balance, .btn-save, .btn-cancel-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.btn-edit-balance {
+  background: #00897b;
+  color: white;
+}
+
+.btn-edit-balance:hover {
+  background: #00695c;
+}
+
+.btn-save {
+  background: #10b981;
+  color: white;
+}
+
+.btn-save:hover {
+  background: #059669;
+}
+
+.btn-cancel-edit {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-cancel-edit:hover {
+  background: #4b5563;
+}
+
+.lbm-note {
+  font-size: 0.75rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.loading-spinner {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.empty-row td {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+}

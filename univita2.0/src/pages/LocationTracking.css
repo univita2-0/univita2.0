@@ -1,0 +1,120 @@
+.lt-dashboard { padding: 32px; background: #f8fafc; min-height: 100vh; }
+.lt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.lt-actions { display: flex; gap: 12px; }
+.nav-action-btn { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; font-weight: 600; cursor: pointer; }
+.sync-btn { border-color: #3b82f6; color: #2563eb; background: #eff6ff; }
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 2rem; }
+.stat-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center; }
+.stat-value { font-size: 1.8rem; font-weight: 800; color: #111827; }
+.stat-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-top: 4px; }
+.data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+.data-table th { background: #f8fafc; padding: 14px 20px; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
+.data-table td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; }
+.alert-row { background-color: #fff1f2 !important; }
+.status-pill { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+.pill-active { background: #dcfce7; color: #166534; }
+.pill-outside { background: #fee2e2; color: #991b1b; }
+.pill-gps-on { background: #e0f2fe; color: #075985; }
+.pill-gps-off { background: #f1f5f9; color: #475569; }
+.pill-unknown { background: #f1f5f9; color: #64748b; }
+.no-schedule-text { font-size: 0.8rem; color: #94a3b8; font-style: italic; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1; }
+.schedule-badge { display: flex; flex-direction: column; font-size: 0.75rem; color: #1e293b; }
+.schedule-place { font-weight: 600; color: #2563eb; }
+.schedule-badge.inactive {
+  background-color: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+
+.pill-gps-on { background: #dcfce7; color: #166534; }
+.pill-gps-off { background: #fee2e2; color: #991b1b; }
+.alert-row { background-color: #fff1f2 !important; transition: background 0.3s; }
+.status-pill { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-block; }
+/* Date picker */
+.date-picker {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  font-size: 14px;
+  margin-right: 12px;
+  font-family: inherit;
+}
+
+/* Actions (eye icon) */
+.eye-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #3b82f6;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.eye-icon:hover {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+/* History modal controls */
+.history-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 8px 0;
+}
+.history-controls label {
+  font-weight: 600;
+  color: #334155;
+}
+.history-controls button {
+  background: #3b82f6;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+}
+.history-controls button:hover {
+  background: #2563eb;
+}
+
+/* Small table variant for modals */
+.data-table.small td,
+.data-table.small th {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+}
+
+/* Empty row styling */
+.empty-row td {
+  text-align: center;
+  padding: 40px !important;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Subtitle */
+.subtitle {
+  color: #64748b;
+  margin-top: 4px;
+  font-size: 0.9rem;
+}
+
+/* Ensure the table fits on small screens */
+@media (max-width: 1200px) {
+  .data-table {
+    font-size: 0.8rem;
+  }
+  .data-table td,
+  .data-table th {
+    padding: 10px 12px;
+  }
+}

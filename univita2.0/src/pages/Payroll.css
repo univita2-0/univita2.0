@@ -1,0 +1,89 @@
+/* src/pages/Payroll.css */
+.payroll-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+}
+
+.payroll-card {
+  background: white;
+  border-radius: 16px;
+  padding: 4rem 2rem;
+  width: 600px;
+  max-width: 90%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lock-icon-wrapper {
+  background-color: #00897B;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.payroll-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.75rem;
+}
+
+.payroll-text {
+  color: #6B7280;
+  font-size: 0.95rem;
+  max-width: 450px;
+  margin-bottom: 3rem;
+  line-height: 1.5;
+}
+
+.security-label {
+  display: block;
+  font-weight: 500;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+  color: #1F2937;
+}
+
+.security-input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+  margin-bottom: 1.5rem;
+}
+
+.btn-unlock {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.9rem;
+  background-color: #00897B;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.security-success {
+  color: #10b981;
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+.pin-modal {
+  width: 400px;
+  max-width: 90%;
+}

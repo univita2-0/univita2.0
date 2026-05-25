@@ -1,0 +1,136 @@
+/* FormalModal.css – Unified formal modal styles for the entire app */
+
+.formal-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeInOverlay 0.2s ease-out;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.formal-modal-content {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: 0;
+  animation: slideUpModal 0.25s ease-out;
+}
+
+@keyframes slideUpModal {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.formal-modal-content.modal-wide {
+  max-width: 1100px;
+  width: 95%;   
+}
+
+.formal-modal-content.modal-small {
+  max-width: 420px;
+}
+
+.formal-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.formal-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.formal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.formal-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.formal-modal-body {
+  padding: 24px;
+}
+
+.formal-modal-body p {
+  margin: 0 0 16px 0;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.formal-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Keep existing form styles so they don't need to be redefined */
+.formal-modal-body .modal-form-group { margin-bottom: 18px; }
+.formal-modal-body .modal-label { display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.formal-modal-body .modal-input, .formal-modal-body .modal-select {
+  width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 10px;
+  font-size: 0.9rem; color: #0f172a; background-color: #f8fafc; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box;
+}
+.formal-modal-body .modal-input:focus, .formal-modal-body .modal-select:focus {
+  border-color: #00897B; background-color: #fff; box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.1);
+}
+.formal-modal-body .modal-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 20px; padding-right: 36px;
+}
+
+/* Button styles for footer usage */
+.formal-modal-footer .btn-modal-cancel,
+.formal-modal-footer .btn-modal-submit {
+  padding: 10px 24px; border-radius: 40px; font-weight: 600; font-size: 0.85rem;
+  border: none; cursor: pointer; transition: background 0.2s, transform 0.1s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.formal-modal-footer .btn-modal-cancel { background: #f1f5f9; color: #475569; }
+.formal-modal-footer .btn-modal-cancel:hover { background: #e2e8f0; }
+.formal-modal-footer .btn-modal-submit { background: #0f172a; color: #ffffff; }
+.formal-modal-footer .btn-modal-submit:hover { background: #1e293b; }
+.formal-modal-footer .btn-modal-submit:active { transform: scale(0.97); }
+.formal-modal-footer .btn-modal-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .formal-modal-content { border-radius: 16px; width: 95%; }
+  .formal-modal-header, .formal-modal-body, .formal-modal-footer { padding-left: 16px; padding-right: 16px; }
+}

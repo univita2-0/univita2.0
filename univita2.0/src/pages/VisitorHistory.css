@@ -1,0 +1,9 @@
+.vh-container {
+  min-height: 80vh;
+  background-color: var(--bg-light);
+  margin-top: 1rem;
+}
+.vh-card { padding: 0; }
+.vh-header { background-color: #E5E7EB; }
+.vh-header th { color: var(--text-dark); }
+.vh-row-empty { height: 45px; }
