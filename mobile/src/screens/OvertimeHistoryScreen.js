@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
-  ActivityIndicator, StatusBar
+  ActivityIndicator, StatusBar, Linking
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Calendar, Clock, FileText } from 'lucide-react-native';
+import { X, Calendar, Clock, FileText, AlertCircle } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './api';
 
@@ -35,9 +35,23 @@ export default function OvertimeHistoryScreen({ navigation }) {
   };
 
   const getStatusColor = (status) => {
-    if (status === 'Approved') return '#10B981';
-    if (status === 'Rejected') return '#EF4444';
+    const s = status?.toLowerCase();
+    if (s === 'approved') return '#10B981';
+    if (s === 'rejected') return '#EF4444';
     return '#F59E0B';
+  };
+
+  const getScenarioLabel = (scenario) => {
+    switch (scenario) {
+      case 'future': return 'Future Date';
+      case 'ongoing': return 'Ongoing Shift (extend)';
+      case 'after_shift': return 'After Shift (extra)';
+      default: return scenario || '—';
+    }
+  };
+
+  const openAttachment = (url) => {
+    if (url) Linking.openURL(url);
   };
 
   if (loading) {
@@ -70,21 +84,37 @@ export default function OvertimeHistoryScreen({ navigation }) {
                 <Calendar size={16} color="#00897B" />
                 <Text style={styles.date}>{item.date}</Text>
               </View>
-              <View style={styles.cardBody}>
+
+              <View style={styles.cardRow}>
                 <Clock size={14} color="#64748B" />
                 <Text style={styles.time}>{item.start_time} – {item.end_time}</Text>
               </View>
-              <Text style={styles.reason}>{item.reason}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}15` }]}>
-                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                  {item.status?.toUpperCase() || 'PENDING'}
-                </Text>
+
+              <View style={styles.cardRow}>
+                <AlertCircle size={14} color="#64748B" />
+                <Text style={styles.scenario}>{getScenarioLabel(item.scenario_type)}</Text>
               </View>
-              {item.attachment_url && (
-                <View style={styles.attachmentBadge}>
-                  <FileText size={12} color="#64748B" />
-                  <Text style={styles.attachmentText}>Has attachment</Text>
+
+              <Text style={styles.reason}>{item.reason}</Text>
+
+              <View style={styles.statusRow}>
+                <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}15` }]}>
+                  <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                    {item.status?.toUpperCase() || 'PENDING'}
+                  </Text>
                 </View>
+                {item.processed === 1 && (
+                  <View style={styles.processedBadge}>
+                    <Text style={styles.processedText}>✓ Processed</Text>
+                  </View>
+                )}
+              </View>
+
+              {item.attachment && (
+                <TouchableOpacity style={styles.attachmentButton} onPress={() => openAttachment(`${API_URL.replace('/api', '')}${item.attachment}`)}>
+                  <FileText size={12} color="#00897B" />
+                  <Text style={styles.attachmentText}>View Attachment</Text>
+                </TouchableOpacity>
               )}
             </View>
           )}
@@ -121,12 +151,16 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   date: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  cardBody: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   time: { fontSize: 13, color: '#475569' },
+  scenario: { fontSize: 13, color: '#475569', fontStyle: 'italic' },
   reason: { fontSize: 13, color: '#475569', marginBottom: 10 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700' },
-  attachmentBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  attachmentText: { fontSize: 10, color: '#64748B' },
+  processedBadge: { backgroundColor: '#E0F2F1', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  processedText: { fontSize: 10, color: '#00897B', fontWeight: '600' },
+  attachmentButton: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  attachmentText: { fontSize: 12, color: '#00897B', fontWeight: '500' },
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 50 },
 });

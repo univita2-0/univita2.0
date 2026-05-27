@@ -14,6 +14,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import axios from 'axios';
+import { useNavigation } from '@react-navigation/native';
 
 import {
   clockIn, clockOut, fetchAttendanceHistory, fetchUserSchedule,
@@ -29,7 +30,7 @@ import {
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
-// ------------------- BACKGROUND TASK (unchanged) -------------------
+// Background location task
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   console.log("🔁 Background task fired at", new Date().toLocaleTimeString());
   if (error) {
@@ -53,7 +54,6 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       const schedule = await AsyncStorage.getItem('today_schedule');
       const parsed = schedule ? JSON.parse(schedule) : null;
       const url = `${API_URL}/instructor/location`;
-      console.log("Pinging URL:", url);
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -97,6 +97,8 @@ const { width } = Dimensions.get('window');
 const isSmallDevice = width < 375;
 const isLargeDevice = width > 428;
 
+const getTodayString = () => new Date().toISOString().split('T')[0];
+
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -129,7 +131,7 @@ export default function HomeScreen({ navigation }) {
     return "Good Evening";
   };
 
-  // ---------- BACKGROUND TRACKING (unchanged) ----------
+  // ---------- BACKGROUND TRACKING ----------
   useEffect(() => {
     let isMounted = true;
     const initBackgroundTracking = async () => {
@@ -173,91 +175,14 @@ export default function HomeScreen({ navigation }) {
     return () => { isMounted = false; };
   }, []);
 
-  const testManualPing = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert("Permission needed");
-        return;
-      }
-      const location = await Location.getCurrentPositionAsync({});
-      const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`${API_URL}/instructor/location`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          location_enabled: true,
-          location_name: "Manual Test"
-        })
-      });
-      const result = await response.json();
-      Alert.alert("Manual Ping", result.success ? "Success" : "Failed: " + JSON.stringify(result));
-    } catch (err) {
-      Alert.alert("Error", err.message);
-    }
-  };
-
-  // ---------- All existing functions (unchanged) ----------
-  const getTodayString = () => new Date().toISOString().split('T')[0];
+  // ---------- Helper functions ----------
   const captureSelfie = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Camera permission needed'); return null; }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
     return !result.canceled ? result.assets[0].uri : null;
   };
-  const performClockAction = async (type) => {
-    if (!todaySchedule) return Alert.alert("Cannot Clock", "No schedule for today.");
-    const selfieUri = await captureSelfie();
-    if (!selfieUri) return Alert.alert('Selfie Required', 'Please take a selfie.');
-    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    try {
-      const formData = new FormData();
-      formData.append('employee_id', user.employeeId);
-      formData.append('latitude', location.coords.latitude.toString());
-      formData.append('longitude', location.coords.longitude.toString());
-      formData.append('location_enabled', type === 'in' ? 'true' : 'false');
-      formData.append('schedule_id', todaySchedule.id);
-      const filename = selfieUri.split('/').pop();
-      formData.append('selfie', { uri: selfieUri, name: filename, type: 'image/jpeg' });
-      const result = type === 'in' ? await clockIn(formData) : await clockOut(formData);
-      if (result.success) {
-        Alert.alert('Success', result.message);
-        await loadData();
-      } else {
-        Alert.alert('Error', result.message);
-      }
-    } catch (error) { Alert.alert('Network Error', 'Connection failed.'); }
-  };
-  const handleClockIn = () => performClockAction('in');
-  const handleClockOut = () => performClockAction('out');
-  const submitCorrection = async () => {
-    if (!correctionDate || !correctionTime || !correctionReason.trim()) return Alert.alert('Required', 'Please fill all fields.');
-    const selfieUri = correctionSelfie || await captureSelfie();
-    if (!selfieUri) return Alert.alert('Selfie Required', 'Please take a selfie.');
-    setSubmittingCorrection(true);
-    try {
-      const formData = new FormData();
-      formData.append('employee_id', user.employeeId);
-      formData.append('date', correctionDate);
-      formData.append('type', correctionType);
-      formData.append('time', correctionTime);
-      formData.append('reason', correctionReason.trim());
-      formData.append('selfie', { uri: selfieUri, name: 'correction.jpg', type: 'image/jpeg' });
-      const result = await requestAttendanceCorrection(formData);
-      if (result.success) {
-        Alert.alert('Success', 'Request submitted.');
-        setShowCorrectionModal(false);
-      } else {
-        Alert.alert('Error', result.message);
-      }
-    } catch (err) { Alert.alert('Error', 'Network error.'); }
-    finally { setSubmittingCorrection(false); }
-  };
+
   const loadData = useCallback(async () => {
     try {
       const rawUser = await AsyncStorage.getItem('user');
@@ -284,6 +209,7 @@ export default function HomeScreen({ navigation }) {
       console.error("Error loading home data:", error);
     }
   }, []);
+
   const checkTodayStatus = (history, activeSchedule) => {
     if (!activeSchedule) {
       setAttendanceStatus({ canClockIn: false, canClockOut: false, todayRecord: null });
@@ -302,6 +228,7 @@ export default function HomeScreen({ navigation }) {
       setAttendanceStatus({ canClockIn: true, canClockOut: false, todayRecord: null });
     }
   };
+
   const calculateStats = (history) => {
     let counts = { present: 0, absent: 0, late: 0, overtime: 0 };
     history.forEach(r => {
@@ -312,6 +239,117 @@ export default function HomeScreen({ navigation }) {
     });
     setStats(counts);
   };
+
+  // Clock In
+  const handleClockIn = async () => {
+    if (!todaySchedule) return Alert.alert("Cannot Clock In", "No schedule for today.");
+    const selfieUri = await captureSelfie();
+    if (!selfieUri) return Alert.alert('Selfie Required', 'Please take a selfie.');
+    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    try {
+      const formData = new FormData();
+      formData.append('employee_id', user.employeeId);
+      formData.append('latitude', location.coords.latitude.toString());
+      formData.append('longitude', location.coords.longitude.toString());
+      formData.append('location_enabled', 'true');
+      formData.append('schedule_id', todaySchedule.id);
+      const filename = selfieUri.split('/').pop();
+      formData.append('selfie', { uri: selfieUri, name: filename, type: 'image/jpeg' });
+      const result = await clockIn(formData);
+      if (result.success) {
+        Alert.alert('Success', result.message);
+        await loadData();
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) { Alert.alert('Network Error', 'Connection failed.'); }
+  };
+
+  // Clock Out with early detection
+  const handleClockOut = async () => {
+    if (!todaySchedule) {
+      Alert.alert("Cannot Clock Out", "No schedule for today.");
+      return;
+    }
+
+    const now = new Date();
+    const currentTimeStr = now.toTimeString().slice(0, 5); // "15:30"
+    const scheduledEndTime = todaySchedule.end_time; // e.g., "17:00:00"
+
+    if (currentTimeStr < scheduledEndTime.slice(0, 5)) {
+      // Early clock-out → ask to request correction
+      Alert.alert(
+        "Early Clock Out",
+        `Your shift ends at ${scheduledEndTime.slice(0,5)}. Do you want to request an early clock‑out correction?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Request Correction",
+            onPress: () => {
+              navigation.navigate("Requests", {
+                prefillTab: "correction",
+                prefillDate: getTodayString(),
+                prefillType: "clock_out",
+                prefillTime: currentTimeStr,
+                prefillReason: "Early clock-out requested"
+              });
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Normal clock-out
+    const selfieUri = await captureSelfie();
+    if (!selfieUri) return Alert.alert('Selfie Required', 'Please take a selfie.');
+    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    try {
+      const formData = new FormData();
+      formData.append('employee_id', user.employeeId);
+      formData.append('latitude', location.coords.latitude.toString());
+      formData.append('longitude', location.coords.longitude.toString());
+      formData.append('location_enabled', 'false');
+      formData.append('schedule_id', todaySchedule.id);
+      const filename = selfieUri.split('/').pop();
+      formData.append('selfie', { uri: selfieUri, name: filename, type: 'image/jpeg' });
+      const result = await clockOut(formData);
+      if (result.success) {
+        Alert.alert('Success', result.message);
+        await loadData();
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) { Alert.alert('Network Error', 'Connection failed.'); }
+  };
+
+  // Correction submission (modal)
+  const submitCorrection = async () => {
+    if (!correctionDate || !correctionTime || !correctionReason.trim()) return Alert.alert('Required', 'Please fill all fields.');
+    const selfieUri = correctionSelfie || await captureSelfie();
+    if (!selfieUri) return Alert.alert('Selfie Required', 'Please take a selfie.');
+    setSubmittingCorrection(true);
+    try {
+      const formData = new FormData();
+      formData.append('employee_id', user.employeeId);
+      formData.append('date', correctionDate);
+      formData.append('type', correctionType);
+      formData.append('time', correctionTime);
+      formData.append('reason', correctionReason.trim());
+      formData.append('selfie', { uri: selfieUri, name: 'correction.jpg', type: 'image/jpeg' });
+      const result = await requestAttendanceCorrection(formData);
+      if (result.success) {
+        Alert.alert('Success', 'Request submitted.');
+        setShowCorrectionModal(false);
+        setCorrectionDate(''); setCorrectionTime(''); setCorrectionReason(''); setCorrectionSelfie(null);
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (err) { Alert.alert('Error', 'Network error.'); }
+    finally { setSubmittingCorrection(false); }
+  };
+
+  // Emergency alerts
   useEffect(() => {
     const loadAlerts = async () => {
       if (!user.id) return;
@@ -326,6 +364,7 @@ export default function HomeScreen({ navigation }) {
     };
     loadAlerts();
   }, [user.id]);
+
   const showNextAlert = (alert) => {
     setCurrentAlert(alert);
     setShowAlertModal(true);
@@ -333,6 +372,7 @@ export default function HomeScreen({ navigation }) {
     else if (alert.severity === 'warning') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
+
   const dismissAlert = async () => {
     if (currentAlert) {
       await markAlertAsRead(currentAlert.id, user.id);
@@ -342,6 +382,8 @@ export default function HomeScreen({ navigation }) {
       if (newQueue.length > 0) showNextAlert(newQueue[0]);
     } else setShowAlertModal(false);
   };
+
+  // Offline sync
   useEffect(() => {
     if (hasSynced.current) return;
     hasSynced.current = true;
@@ -351,10 +393,14 @@ export default function HomeScreen({ navigation }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Time ticker
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Chat unread count
   useEffect(() => {
     const fetchUnread = async () => {
       const token = await AsyncStorage.getItem('auth_token');
@@ -372,6 +418,7 @@ export default function HomeScreen({ navigation }) {
     const interval = setInterval(fetchUnread, 10000);
     return () => clearInterval(interval);
   }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
   const formattedDate = currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -379,7 +426,6 @@ export default function HomeScreen({ navigation }) {
   const finalCanClockIn = todaySchedule !== null && attendanceStatus.canClockIn;
   const finalCanClockOut = todaySchedule !== null && attendanceStatus.canClockOut;
 
-  // ---------- REDESIGNED RENDER (bolder changes) ----------
   return (
     <>
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
@@ -389,7 +435,7 @@ export default function HomeScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00897B"]} />}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header with dynamic greeting + avatar */}
+          {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.greeting}>{getGreeting()}</Text>
@@ -400,13 +446,13 @@ export default function HomeScreen({ navigation }) {
                 <Bell size={22} color="#1E293B" />
                 {unreadCount > 0 && <View style={styles.badge} />}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.avatarButton} onPress={testManualPing}>
+              <TouchableOpacity style={styles.avatarButton}>
                 <User size={22} color="#00897B" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Date & Time – with calendar icon */}
+          {/* Date & Time */}
           <View style={styles.dateCard}>
             <CalendarDays size={24} color="#00897B" style={{ marginBottom: 8 }} />
             <Text style={styles.dateText}>{formattedDate}</Text>
@@ -435,7 +481,7 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
-          {/* Clock In/Out Buttons – outline style for clock out */}
+          {/* Clock Buttons */}
           <View style={styles.clockContainer}>
             <TouchableOpacity
               style={[styles.clockButton, styles.clockInButton, !finalCanClockIn && styles.clockDisabled]}
@@ -467,7 +513,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           )}
 
-          {/* Horizontal scroll stats */}
+          {/* Stats */}
           <Text style={styles.statsHeader}>Monthly Overview</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
             <StatCard icon={<CheckCircle size={20} color="#10B981" />} label="Present" value={stats.present} />
@@ -539,7 +585,7 @@ export default function HomeScreen({ navigation }) {
           </SafeAreaView>
         </Modal>
 
-        {/* Attendance Correction Modal */}
+        {/* Correction Modal (optional – used if you want modal instead of inline) */}
         <Modal visible={showCorrectionModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContainer}>
@@ -550,7 +596,7 @@ export default function HomeScreen({ navigation }) {
               <ScrollView>
                 <Text style={styles.inputLabel}>Date</Text>
                 <TextInput style={styles.input} value={correctionDate} editable={false} />
-                <Text style={styles.inputLabel}>What do you need to correct?</Text>
+                <Text style={styles.inputLabel}>What to correct?</Text>
                 <View style={styles.typeGroup}>
                   <TouchableOpacity style={[styles.typeChip, correctionType === 'clock_in' && styles.typeChipActive]} onPress={() => setCorrectionType('clock_in')}>
                     <Text style={[styles.typeChipText, correctionType === 'clock_in' && styles.typeChipTextActive]}>Clock In</Text>
@@ -562,14 +608,14 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.inputLabel}>Time (HH:MM)</Text>
                 <TextInput style={styles.input} placeholder="09:00" value={correctionTime} onChangeText={setCorrectionTime} />
                 <Text style={styles.inputLabel}>Reason</Text>
-                <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Why did you forget to clock?" value={correctionReason} onChangeText={setCorrectionReason} />
-                <Text style={styles.inputLabel}>Selfie (proof)</Text>
+                <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Why?" value={correctionReason} onChangeText={setCorrectionReason} />
+                <Text style={styles.inputLabel}>Selfie</Text>
                 <TouchableOpacity style={styles.uploadBtn} onPress={async () => { const uri = await captureSelfie(); if (uri) setCorrectionSelfie(uri); }}>
                   <Camera size={18} color="#0d9488" /><Text style={styles.uploadText}>{correctionSelfie ? 'Retake Selfie' : 'Take Selfie'}</Text>
                 </TouchableOpacity>
                 {correctionSelfie && <Image source={{ uri: correctionSelfie }} style={styles.previewImage} />}
                 <TouchableOpacity style={styles.submitBtn} onPress={submitCorrection} disabled={submittingCorrection}>
-                  <Text style={styles.submitBtnText}>{submittingCorrection ? 'Submitting...' : 'Submit Correction Request'}</Text>
+                  <Text style={styles.submitBtnText}>{submittingCorrection ? 'Submitting...' : 'Submit Correction'}</Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -580,7 +626,7 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-// Stat card component
+// Stat Card Component
 const StatCard = ({ icon, label, value }) => (
   <View style={styles.statCardScroll}>
     <View style={styles.statIconBox}>{icon}</View>
@@ -589,51 +635,21 @@ const StatCard = ({ icon, label, value }) => (
   </View>
 );
 
-// ---------- STYLES (distinctly redesigned) ----------
+// Styles
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
   scroll: { paddingHorizontal: 20, paddingBottom: 80, paddingTop: Platform.OS === 'android' ? 8 : 0 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   greeting: { fontSize: 14, fontWeight: '500', color: '#64748B' },
   userName: { fontSize: 22, fontWeight: '700', color: '#0F172A', marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bellButton: { padding: 8, position: 'relative' },
   badge: { position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' },
   avatarButton: { padding: 8, backgroundColor: '#E0F2F1', borderRadius: 30 },
-  dateCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  dateCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
   dateText: { fontSize: 15, color: '#64748B', fontWeight: '500', marginTop: 8 },
   timeText: { fontSize: 32, fontWeight: '800', color: '#0F172A', marginTop: 4 },
-  scheduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  scheduleCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
   cardLabel: { fontSize: 13, fontWeight: '600', color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   scheduleTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   scheduleTime: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
@@ -651,7 +667,7 @@ const styles = StyleSheet.create({
   clockedInText: { fontSize: 13, color: '#10B981', fontWeight: '500' },
   statsHeader: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 16 },
   statsScroll: { flexDirection: 'row', marginBottom: 32 },
-  statCardScroll: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginRight: 12, width: 100, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
+  statCardScroll: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginRight: 12, width: 100, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   statIconBox: { marginBottom: 8 },
   statValueScroll: { fontSize: 24, fontWeight: '800', color: '#0F172A', marginTop: 4 },
   statLabelScroll: { fontSize: 12, color: '#64748B', marginTop: 4 },
@@ -659,7 +675,7 @@ const styles = StyleSheet.create({
   actionItem: { alignItems: 'center', gap: 8, flex: 0.4 },
   actionIcon: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   actionTitle: { fontSize: 13, fontWeight: '600', color: '#1E293B' },
-  chatFab: { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#00897B', justifyContent: 'center', alignItems: 'center', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  chatFab: { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#00897B', justifyContent: 'center', alignItems: 'center', elevation: 6 },
   unreadBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
   unreadText: { color: 'white', fontSize: 11, fontWeight: '700' },
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },

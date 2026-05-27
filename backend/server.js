@@ -3532,15 +3532,48 @@ app.get('/api/visitor-requests/history', authenticateToken, (req, res) => {
   });
 });
 
-app.post('/api/overtime-requests', authenticateToken, upload.single('attachment'), (req, res) => {
-  const { date, start_time, end_time, reason } = req.body;
+app.post('/api/overtime-requests', authenticateToken, upload.single('attachment'), async (req, res) => {
+  const { date, start_time, end_time, reason, scenario_type } = req.body;
   const userId = req.user.id;
   const attachment = req.file ? `/uploads/${req.file.filename}` : null;
-  db.query(
-    "INSERT INTO overtime_requests (user_id, date, start_time, end_time, reason, attachment) VALUES (?, ?, ?, ?, ?, ?)",
-    [userId, date, start_time, end_time, reason, attachment],
-    (err) => { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }
-  );
+
+  if (!date || !start_time || !end_time || !reason || !scenario_type) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    // Validate scenario_type
+    if (!['future', 'ongoing', 'after_shift'].includes(scenario_type)) {
+      return res.status(400).json({ error: 'Invalid scenario_type' });
+    }
+
+    // For 'ongoing' scenario, verify there is an active attendance record today
+    let attendanceId = null;
+    if (scenario_type === 'ongoing') {
+      const [attRecords] = await db.promise().query(
+        `SELECT id, time_in, time_out FROM attendance 
+         WHERE user_id = (SELECT employee_id FROM users WHERE id = ?) AND date = ? AND time_out IS NULL`,
+        [userId, date]
+      );
+      if (attRecords.length === 0) {
+        return res.status(400).json({ error: 'No active clock‑in found for today. Cannot request ongoing overtime.' });
+      }
+      attendanceId = attRecords[0].id;
+    }
+
+    // Insert request
+    const [result] = await db.promise().query(
+      `INSERT INTO overtime_requests 
+       (user_id, date, start_time, end_time, reason, attachment, scenario_type, attendance_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [userId, date, start_time, end_time, reason, attachment, scenario_type, attendanceId]
+    );
+
+    res.json({ success: true, requestId: result.insertId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/overtime-requests', authenticateToken, (req, res) => {
@@ -3548,6 +3581,272 @@ app.get('/api/overtime-requests', authenticateToken, (req, res) => {
   db.query("SELECT * FROM overtime_requests WHERE user_id = ? ORDER BY date DESC", [userId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
+  });
+});
+
+// GET pending overtime requests
+app.get('/api/overtime-requests/pending', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  db.query(
+    `SELECT o.*, u.full_name, u.employee_id 
+     FROM overtime_requests o
+     JOIN users u ON o.user_id = u.id
+     WHERE o.status = 'pending'
+     ORDER BY o.created_at DESC`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    }
+  );
+});
+
+// PUT approve/reject overtime request
+app.put('/api/overtime-requests/:id/status', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const { status } = req.body; // 'approved' or 'rejected'
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  const connection = await db.promise().getConnection();
+  await connection.beginTransaction();
+
+  try {
+    // Fetch the overtime request with user details
+    const [rows] = await connection.query(
+      `SELECT o.*, u.employee_id, u.id as user_id 
+       FROM overtime_requests o
+       JOIN users u ON o.user_id = u.id
+       WHERE o.id = ? AND o.processed = 0`,
+      [id]
+    );
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Request not found or already processed' });
+    }
+    const reqData = rows[0];
+
+    // Update status
+    await connection.query(`UPDATE overtime_requests SET status = ?, processed = 1 WHERE id = ?`, [status, id]);
+
+    if (status === 'approved') {
+      const overtimeHours = calculateHours(reqData.start_time, reqData.end_time);
+      const overtimePay = overtimeHours * (hourlyRateFromUser(reqData.user_id) * 1.25); // example 1.25x rate
+
+      // --- Update attendance based on scenario_type ---
+      if (reqData.scenario_type === 'ongoing' && reqData.attendance_id) {
+        // Extend the ongoing attendance record
+        await connection.query(
+          `UPDATE attendance SET time_out = ?, total_hours = TIMESTAMPDIFF(HOUR, time_in, ?) 
+           WHERE id = ?`,
+          [reqData.end_time, reqData.end_time, reqData.attendance_id]
+        );
+      } 
+      else if (reqData.scenario_type === 'future') {
+        // Create a separate attendance record for overtime (no clock‑in/out selfies)
+        await connection.query(
+          `INSERT INTO attendance 
+           (user_id, date, time_in, time_out, status, location, total_hours, correction_requested)
+           VALUES (?, ?, ?, ?, 'overtime', 'Approved Overtime', ?, 0)`,
+          [reqData.employee_id, reqData.date, reqData.start_time, reqData.end_time, overtimeHours]
+        );
+      } 
+      else if (reqData.scenario_type === 'after_shift') {
+        // Insert a separate overtime attendance record (even if already clocked out)
+        await connection.query(
+          `INSERT INTO attendance 
+           (user_id, date, time_in, time_out, status, location, total_hours, correction_requested)
+           VALUES (?, ?, ?, ?, 'overtime', 'Approved Overtime (After Shift)', ?, 0)`,
+          [reqData.employee_id, reqData.date, reqData.start_time, reqData.end_time, overtimeHours]
+        );
+      }
+
+      // --- Update payroll (add overtime hours & pay) ---
+      // Find existing payroll entry for that user & month
+      const monthYear = new Date(reqData.date).toLocaleString('default', { month: 'long', year: 'numeric' });
+      const [payrollRows] = await connection.query(
+        `SELECT id, overtime_hours, overtime_pay FROM payroll 
+         WHERE user_id = ? AND month_year = ?`,
+        [reqData.user_id, monthYear]
+      );
+      if (payrollRows.length > 0) {
+        const newOvertimeHours = (payrollRows[0].overtime_hours || 0) + overtimeHours;
+        const newOvertimePay = (payrollRows[0].overtime_pay || 0) + overtimePay;
+        // Optionally recalculate net pay (gross + overtime pay - deductions)
+        await connection.query(
+          `UPDATE payroll 
+           SET overtime_hours = ?, overtime_pay = ?, gross_pay = gross_pay + ?, net_pay = net_pay + ?
+           WHERE id = ?`,
+          [newOvertimeHours, newOvertimePay, overtimePay, overtimePay, payrollRows[0].id]
+        );
+      } else {
+        // If no payroll entry exists, create one (monthly payroll will later integrate)
+        // For simplicity, you may skip or create a minimal entry.
+        console.log(`No payroll entry for ${monthYear}, user ${reqData.user_id}. Overtime will be included when monthly payroll is run.`);
+      }
+    }
+
+    await connection.commit();
+    res.json({ success: true });
+  } catch (err) {
+    await connection.rollback();
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// Helper functions
+function calculateHours(start, end) {
+  const startDate = new Date(`1970-01-01T${start}`);
+  const endDate = new Date(`1970-01-01T${end}`);
+  return (endDate - startDate) / 3600000;
+}
+
+async function hourlyRateFromUser(userId) {
+  const [rows] = await db.promise().query(
+    `SELECT monthly_salary, work_days_per_month FROM users WHERE id = ?`,
+    [userId]
+  );
+  if (rows.length === 0) return 0;
+  const dailyRate = rows[0].monthly_salary / rows[0].work_days_per_month;
+  return dailyRate / 8; // assumes 8‑hour workday
+}
+
+app.get('/api/overtime-requests/all', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  db.query(`
+    SELECT o.*, u.full_name, u.employee_id
+    FROM overtime_requests o
+    JOIN users u ON o.user_id = u.id
+    ORDER BY o.created_at DESC
+  `, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// GET pending correction requests (from attendance_corrections table)
+app.get('/api/attendance/corrections/pending', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  db.query(
+    `SELECT c.*, u.full_name, u.employee_id
+     FROM attendance_corrections c
+     JOIN users u ON c.user_id = u.employee_id
+     WHERE c.status = 'pending'
+     ORDER BY c.id DESC`,
+    (err, rows) => {
+      if (err) {
+        console.error("Pending corrections error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(rows);
+    }
+  );
+});
+
+// Get grouped leave requests for admin (consecutive days grouped)
+app.get('/api/leave-requests/grouped', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  db.query(
+    `SELECT lr.id, lr.user_id, lr.request_date, lr.type, lr.reason, lr.status, lr.admin_remarks, lr.submitted_at,
+            u.full_name, u.employee_id
+     FROM leave_requests lr
+     JOIN users u ON lr.user_id = u.employee_id
+     WHERE lr.is_hidden = 0
+     ORDER BY u.employee_id, lr.request_date ASC`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      // Group consecutive dates by same user, type, reason
+      const grouped = [];
+      let currentGroup = null;
+      rows.forEach(row => {
+        const date = row.request_date;
+        if (!currentGroup ||
+            currentGroup.user_id !== row.user_id ||
+            currentGroup.type !== row.type ||
+            currentGroup.reason !== row.reason) {
+          // Start new group
+          currentGroup = {
+            ids: [row.id],
+            user_id: row.user_id,
+            full_name: row.full_name,
+            employee_id: row.employee_id,
+            type: row.type,
+            reason: row.reason,
+            status: row.status, // pending, approved, rejected
+            start_date: date,
+            end_date: date,
+            admin_remarks: row.admin_remarks,
+            submitted_at: row.submitted_at,
+            request_count: 1
+          };
+          grouped.push(currentGroup);
+        } else {
+          // Check if date is consecutive
+          const lastDate = new Date(currentGroup.end_date);
+          const currentDate = new Date(date);
+          const diffDays = (currentDate - lastDate) / (1000 * 60 * 60 * 24);
+          if (diffDays === 1) {
+            // Extend group
+            currentGroup.ids.push(row.id);
+            currentGroup.end_date = date;
+            currentGroup.request_count++;
+          } else {
+            // Not consecutive – create new group
+            currentGroup = {
+              ids: [row.id],
+              user_id: row.user_id,
+              full_name: row.full_name,
+              employee_id: row.employee_id,
+              type: row.type,
+              reason: row.reason,
+              status: row.status,
+              start_date: date,
+              end_date: date,
+              admin_remarks: row.admin_remarks,
+              submitted_at: row.submitted_at,
+              request_count: 1
+            };
+            grouped.push(currentGroup);
+          }
+        }
+      });
+      res.json(grouped);
+    }
+  );
+});
+
+// Batch update leave request status
+app.put('/api/leave-requests/batch-status', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { ids, status, admin_remarks } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Invalid request IDs' });
+  }
+  if (!['Approved', 'Rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const query = `UPDATE leave_requests SET status = ?, admin_remarks = ? WHERE id IN (${placeholders})`;
+  db.query(query, [status, admin_remarks || null, ...ids], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
   });
 });
 // ============================================

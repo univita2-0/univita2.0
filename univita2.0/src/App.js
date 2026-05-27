@@ -48,6 +48,7 @@ import LocationTracking from './pages/LocationTracking';
 import ManageReasons from './pages/ManageReasons';
 import ManageBLETags from './pages/ManageBLETags';
 import CompletedVisits from './pages/CompletedVisits';
+import OvertimeRequests from './pages/OvertimeRequests';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -168,6 +169,7 @@ function App() {
       case 'manage-reasons': return { title: 'Manage Visit Reasons' };
       case 'manage-ble-tags': return { title: 'Manage BLE Tags' };
       case 'completed-visits': return { title: 'Completed Visits' };
+      case 'overtime-requests': return { title: 'Overtime Requests' };
       default: return { title: 'Dashboard' };
     }
   };
@@ -202,6 +204,8 @@ function App() {
         return <AttendanceCorrection />;
       case 'attendance-appeals':
         return <AttendanceAppeals />;
+      case 'overtime-requests':
+        return <OvertimeRequests />;
       case 'leave-management':
         return <LeaveManagement />;
       case 'shared-calendar':

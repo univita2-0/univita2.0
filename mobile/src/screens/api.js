@@ -162,6 +162,40 @@ export const resetPassword = async (email, otp, newPassword) => {
   }
 };
 
+// ==========================================
+// OVERTIME REQUESTS (Mobile)
+// ==========================================
+
+// Submit an overtime request with optional attachment
+export const submitOvertimeRequest = async (formData) => {
+  try {
+    const token = await AsyncStorage.getItem('auth_token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/overtime-requests`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    console.error("Submit Overtime Error:", error.message);
+    return { success: false, message: "Network error" };
+  }
+};
+
+// Fetch overtime request history for the logged‑in instructor
+export const fetchOvertimeHistory = async () => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/overtime-requests`, { headers });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("Fetch Overtime History Error:", error.message);
+    return [];
+  }
+};
 // Request attendance correction (forgot clock in/out)
 export const requestAttendanceCorrection = async (formData) => {
   try {
