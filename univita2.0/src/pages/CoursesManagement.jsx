@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Plus, Edit3, Trash2 } from 'lucide-react';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import FormalModal from '../components/FormalModal';
 import { API_BASE } from '../api';
 
-// Helper to get auth headers (admin endpoints require token)
 const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
 });
@@ -12,6 +13,9 @@ const getAuthHeaders = () => ({
 const CoursesManagement = () => {
   const [courses, setCourses] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [deleteTargetName, setDeleteTargetName] = useState('');
   const [editingCourse, setEditingCourse] = useState(null);
   const [courseName, setCourseName] = useState('');
 
@@ -21,6 +25,7 @@ const CoursesManagement = () => {
       setCourses(res.data || []);
     } catch (err) {
       console.error("Failed to load courses", err);
+      toast.error("Failed to load courses");
     }
   }, []);
 
@@ -37,33 +42,47 @@ const CoursesManagement = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this course?")) {
-      try {
-        await axios.delete(`${API_BASE}/courses/${id}`, getAuthHeaders());
-        loadCourses();
-      } catch (err) {
-        alert("Failed to delete course");
-      }
+  const handleDeleteClick = (id, name) => {
+    setDeleteTargetId(id);
+    setDeleteTargetName(name);
+    setShowConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    try {
+      await axios.delete(`${API_BASE}/courses/${deleteTargetId}`, getAuthHeaders());
+      toast.success("Course deleted successfully");
+      loadCourses();
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || "Failed to delete course";
+      toast.error(errorMsg);
+    } finally {
+      setShowConfirm(false);
+      setDeleteTargetId(null);
+      setDeleteTargetName('');
     }
   };
 
   const handleSave = async () => {
     if (!courseName.trim()) {
-      alert("Course name required");
+      toast.warning("Course name required");
       return;
     }
     try {
       if (editingCourse) {
         await axios.put(`${API_BASE}/courses/${editingCourse.id}`, { name: courseName.trim() }, getAuthHeaders());
+        toast.success("Course updated successfully");
       } else {
         await axios.post(`${API_BASE}/courses`, { name: courseName.trim() }, getAuthHeaders());
+        toast.success("Course added successfully");
       }
       setShowModal(false);
       resetForm();
       loadCourses();
     } catch (err) {
-      alert(err.response?.data?.error || "Error saving course");
+      const errorMsg = err.response?.data?.error || "Error saving course";
+      toast.error(errorMsg);
     }
   };
 
@@ -90,7 +109,7 @@ const CoursesManagement = () => {
               <td>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <Edit3 size={16} style={{ cursor: 'pointer', color: '#00897B' }} onClick={() => handleEdit(course)} />
-                  <Trash2 size={16} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDelete(course.id)} />
+                  <Trash2 size={16} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDeleteClick(course.id, course.name)} />
                 </div>
               </td>
             </tr>
@@ -117,6 +136,22 @@ const CoursesManagement = () => {
           <label className="modal-label">Course Name</label>
           <input type="text" className="modal-input" value={courseName} onChange={e => setCourseName(e.target.value)} placeholder="e.g. Web Development" />
         </div>
+      </FormalModal>
+
+      {/* Delete Confirmation Modal */}
+      <FormalModal
+        show={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        title="Delete Course"
+        footer={
+          <>
+            <button className="btn-modal-cancel" onClick={() => setShowConfirm(false)}>Cancel</button>
+            <button className="btn-modal-submit" onClick={confirmDelete} style={{ backgroundColor: '#dc2626' }}>Delete</button>
+          </>
+        }
+      >
+        <p>Are you sure you want to delete the course <strong>"{deleteTargetName}"</strong>?</p>
+        <p className="text-sm text-gray-500 mt-2">This action cannot be undone.</p>
       </FormalModal>
     </div>
   );

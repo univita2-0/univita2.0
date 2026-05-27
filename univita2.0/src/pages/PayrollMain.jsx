@@ -1,4 +1,3 @@
-// src/pages/PayrollMain.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import './PayrollMain.css';
 import {
@@ -96,40 +95,51 @@ const PayrollMain = ({ setView }) => {
     (emp.full_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // === Robust payroll calculation with fallbacks ===
   const computePayroll = (emp) => {
     const att = attendanceSummary[emp.employee_id] || { regularHours: 0, overtimeHours: 0, leaveDays: 0, lateMinutes: 0 };
-    const monthlySalary = Number(emp.monthly_salary || 0);
-    const workDays = Number(emp.work_days_per_month || 22);
+    let monthlySalary = Number(emp.monthly_salary);
+    if (isNaN(monthlySalary) || monthlySalary <= 0) monthlySalary = 0;
+    let workDays = Number(emp.work_days_per_month);
+    if (isNaN(workDays) || workDays <= 0) workDays = 22;
     const hourlyRate = workDays > 0 ? (monthlySalary / workDays / 8) : 0;
-    const overtimePay = att.overtimeHours * hourlyRate * OT_MULTIPLIER;
+    const regularHours = Number(att.regularHours);
+    const overtimeHours = Number(att.overtimeHours);
+    const overtimePay = overtimeHours * hourlyRate * OT_MULTIPLIER;
     const extras = employeeExtras[emp.employee_id] || {};
 
-    const lateMinutes = (extras.lateMinutesOverride != null) ? extras.lateMinutesOverride : att.lateMinutes;
+    let lateMinutes = (extras.lateMinutesOverride != null) ? extras.lateMinutesOverride : Number(att.lateMinutes);
+    if (isNaN(lateMinutes)) lateMinutes = 0;
     const lateDeduction = (lateMinutes / 60) * hourlyRate;
 
-    const allowances = (extras.transport || 0) + (extras.meal || 0) + (extras.housing || 0);
+    const allowances = (Number(extras.transport) || 0) + (Number(extras.meal) || 0) + (Number(extras.housing) || 0);
     const grossPay = monthlySalary + overtimePay + allowances - lateDeduction;
 
-    const sss = (extras.sssOverride != null) ? extras.sssOverride : Math.min(monthlySalary * 0.045, 1125);
-    const philHealth = (extras.philHealthOverride != null) ? extras.philHealthOverride : Math.min(monthlySalary * 0.025, 1250);
-    const pagIbig = (extras.pagIbigOverride != null) ? extras.pagIbigOverride : Math.min(monthlySalary * 0.02, 100);
+    let sss = (extras.sssOverride != null) ? Number(extras.sssOverride) : Math.min(monthlySalary * 0.045, 1125);
+    if (isNaN(sss)) sss = 0;
+    let philHealth = (extras.philHealthOverride != null) ? Number(extras.philHealthOverride) : Math.min(monthlySalary * 0.025, 1250);
+    if (isNaN(philHealth)) philHealth = 0;
+    let pagIbig = (extras.pagIbigOverride != null) ? Number(extras.pagIbigOverride) : Math.min(monthlySalary * 0.02, 100);
+    if (isNaN(pagIbig)) pagIbig = 0;
 
     const taxableIncome = grossPay - sss - philHealth - pagIbig;
     const tax = computeMonthlyTax(taxableIncome);
-    const totalDeductions = tax + sss + philHealth + pagIbig + (extras.loans || 0) + (extras.other || 0);
+    const loans = Number(extras.loans) || 0;
+    const other = Number(extras.other) || 0;
+    const totalDeductions = tax + sss + philHealth + pagIbig + loans + other;
     const netPay = grossPay - totalDeductions;
 
     return {
-      regularHours: att.regularHours,
-      overtimeHours: att.overtimeHours,
+      regularHours,
+      overtimeHours,
       overtimePay,
       allowances,
       grossPay,
       sss,
       philHealth,
       pagIbig,
-      loans: extras.loans || 0,
-      other: extras.other || 0,
+      loans,
+      other,
       tax,
       netPay,
       totalDeductions,
@@ -137,7 +147,7 @@ const PayrollMain = ({ setView }) => {
       hourlyRate,
       workDays,
       lateMinutes,
-      lateDeduction
+      lateDeduction,
     };
   };
 
@@ -231,25 +241,25 @@ const PayrollMain = ({ setView }) => {
       </style></head><body>
       <h2>Payslip - ${emp.full_name}</h2>
       <table class="payslip-table">
-        <tr><th>Employee ID</th><td>${emp.employee_id}</td></tr>
-        <tr><th>Position</th><td>${emp.position_level || 'Instructor'}</td></tr>
-        <tr><th>Regular Hours</th><td>${calc.regularHours} hrs</td></tr>
-        <tr><th>Overtime Hours</th><td>${calc.overtimeHours} hrs</td></tr>
-        <tr><th>Late Minutes (total)</th><td>${calc.lateMinutes}</td></tr>
-        <tr><th>Late Deduction</th><td>₱${calc.lateDeduction.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Monthly Salary</th><td>₱${calc.monthlySalary.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Overtime Pay</th><td>₱${calc.overtimePay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Transport Allowance</th><td>₱${(extras.transport || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Meal Allowance</th><td>₱${(extras.meal || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Housing Allowance</th><td>₱${(extras.housing || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Gross Pay</th><td>₱${calc.grossPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>SSS (4.5% up to 1,125)</th><td>₱${calc.sss.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>PhilHealth (2.5% up to 1,250)</th><td>₱${calc.philHealth.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Pag-IBIG (2% up to 100)</th><td>₱${calc.pagIbig.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Loans</th><td>₱${(calc.loans).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Other Deductions</th><td>₱${(calc.other).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr><th>Withholding Tax</th><td>₱${calc.tax.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
-        <tr class="net-pay"><th>Net Pay</th><td>₱${calc.netPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td></tr>
+        <tr><th>Employee ID</th><td>${emp.employee_id}</tr>
+        <tr><th>Position</th><td>${emp.position_level || 'Instructor'}</tr>
+        <tr><th>Regular Hours</th><td>${calc.regularHours} hrs</tr>
+        <tr><th>Overtime Hours</th><td>${calc.overtimeHours} hrs</tr>
+        <tr><th>Late Minutes (total)</th><td>${calc.lateMinutes}</tr>
+        <tr><th>Late Deduction</th><td>₱${calc.lateDeduction.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Monthly Salary</th><td>₱${calc.monthlySalary.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Overtime Pay</th><td>₱${calc.overtimePay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Transport Allowance</th><td>₱${(extras.transport || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Meal Allowance</th><td>₱${(extras.meal || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Housing Allowance</th><td>₱${(extras.housing || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Gross Pay</th><td>₱${calc.grossPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>SSS (4.5% up to 1,125)</th><td>₱${calc.sss.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>PhilHealth (2.5% up to 1,250)</th><td>₱${calc.philHealth.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Pag-IBIG (2% up to 100)</th><td>₱${calc.pagIbig.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Loans</th><td>₱${calc.loans.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Other Deductions</th><td>₱${calc.other.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr><th>Withholding Tax</th><td>₱${calc.tax.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
+        <tr class="net-pay"><th>Net Pay</th><td>₱${calc.netPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</tr>
       </table>
       <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }</script>
       </body></html>
@@ -301,7 +311,8 @@ const PayrollMain = ({ setView }) => {
     return acc;
   }, { totalEmployees: filteredEmployees.length, totalGross: 0, totalTax: 0, totalNet: 0 }) : { totalEmployees: 0, totalGross: 0, totalTax: 0, totalNet: 0 };
 
-  const isAllowanceEligible = (emp) => emp.employment_type === 'Full-time' && emp.contract_type === 'Regular';
+  // Allowances only for Regular employees (contract_type = 'Regular')
+  const isAllowanceEligible = (emp) => emp.contract_type === 'Regular';
 
   return (
     <div className="card payroll-main-card">
@@ -353,9 +364,9 @@ const PayrollMain = ({ setView }) => {
               <div className="empty-row">Loading...</div>
             ) : (
               <table className="custom-table payroll-table">
-                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Position</th><th>Actions</th></tr></thead>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Position</th><th>Contract</th><th>Actions</th></tr></thead>
                 <tbody>
-                  {filteredEmployees.length === 0 ? ( <tr><td colSpan="6" className="empty-row">No employees found. </td> </tr> ) : (
+                  {filteredEmployees.length === 0 ? ( <tr><td colSpan="6" className="empty-row">No employees found. </td></tr> ) : (
                     filteredEmployees.map(emp => {
                       const att = attendanceSummary[emp.employee_id] || { regularHours: 0 };
                       return (
@@ -364,7 +375,7 @@ const PayrollMain = ({ setView }) => {
                           <td>{emp.full_name}</td>
                           <td>{emp.email}</td>
                           <td>{emp.position_level || '—'}</td>
-                          
+                          <td>{emp.contract_type || '—'}</td>
                           <td className="text-right">
                             <div className="action-buttons-inline">
                               <button className="btn-payslip" onClick={() => openPayslip(emp)}><Eye size={14} /></button>

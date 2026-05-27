@@ -1,4 +1,3 @@
-// src/pages/Schedule.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import './Schedule.css';
 import axios from 'axios';
@@ -25,6 +24,7 @@ const Schedule = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [schoolLocations, setSchoolLocations] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [conflicts, setConflicts] = useState([]);
   const [hasConflict, setHasConflict] = useState(false);
@@ -40,7 +40,6 @@ const Schedule = () => {
   const [rejectTargetId, setRejectTargetId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Delete confirmation modal state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState(null);
 
@@ -51,7 +50,6 @@ const Schedule = () => {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Helpers
   const getManualDateString = (dateObj) => {
     const y = dateObj.getFullYear(),
           m = String(dateObj.getMonth() + 1).padStart(2, '0'),
@@ -60,26 +58,28 @@ const Schedule = () => {
   };
 
   const getStartOfWeek = (date) => {
-    const d = new Date(date); d.setHours(12,0,0,0);
-    const day = d.getDay(); const diff = d.getDate() - day;
+    const d = new Date(date);
+    d.setHours(12, 0, 0, 0);
+    const day = d.getDay();
+    const diff = d.getDate() - day;
     return new Date(d.setDate(diff));
   };
 
   const weekDaysDates = Array.from({ length: 7 }, (_, i) => {
     const d = getStartOfWeek(currentDate);
     d.setDate(d.getDate() + i);
-    d.setHours(12,0,0,0);
+    d.setHours(12, 0, 0, 0);
     return d;
   });
 
   const formatDateRange = () => {
-    const start = weekDaysDates[0].toLocaleDateString('en-US', { month:'long', day:'numeric' });
-    const end = weekDaysDates[6].toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+    const start = weekDaysDates[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const end = weekDaysDates[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     return `${start} – ${end}`;
   };
 
-  // Data loading
   const loadData = useCallback(async () => {
+    setLoading(true);
     try {
       const [empRes, schedRes, locRes, courseRes] = await Promise.all([
         axios.get(`${API_BASE}/employees`, getAuthHeaders()),
@@ -102,6 +102,8 @@ const Schedule = () => {
     } catch (err) {
       console.error(err);
       toast.error('Failed to load schedule data');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -117,10 +119,10 @@ const Schedule = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Conflict check (unchanged)
   const checkConflict = async (userId, date, start, end, excludeId = null) => {
     if (!userId || !date || !start || !end) {
-      setHasConflict(false); setConflicts([]);
+      setHasConflict(false);
+      setConflicts([]);
       return;
     }
     try {
@@ -130,10 +132,13 @@ const Schedule = () => {
       });
       const busy = res.data || [];
       setConflicts(busy);
-      const overlap = busy.some(bsy => start < bsy.end_time.substring(0,5) && end > bsy.start_time.substring(0,5));
+      const overlap = busy.some(bsy => start < bsy.end_time.substring(0, 5) && end > bsy.start_time.substring(0, 5));
       setHasConflict(overlap);
       return overlap;
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setHasConflict(false);
+    }
   };
 
   useEffect(() => {
@@ -142,7 +147,6 @@ const Schedule = () => {
     }
   }, [formData.user_id, formData.date, formData.start_time, formData.end_time, currentScheduleId]);
 
-  // Handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -154,8 +158,8 @@ const Schedule = () => {
       date: session.schedule_date,
       place: session.place || '',
       course: session.course || '',
-      start_time: session.start_time ? session.start_time.substring(0,5) : '08:00',
-      end_time: session.end_time ? session.end_time.substring(0,5) : '17:00',
+      start_time: session.start_time ? session.start_time.substring(0, 5) : '08:00',
+      end_time: session.end_time ? session.end_time.substring(0, 5) : '17:00',
       status: session.original_status || 'Scheduled'
     });
     setCurrentScheduleId(session.schedule_id);
@@ -210,12 +214,9 @@ const Schedule = () => {
       const url = isEditing
         ? `${API_BASE}/schedules/${currentScheduleId}`
         : `${API_BASE}/schedules`;
-      
       const res = await (isEditing
         ? axios.put(url, formData, getAuthHeaders())
-        : axios.post(url, formData, getAuthHeaders())
-      );
-      
+        : axios.post(url, formData, getAuthHeaders()));
       if (res.data.success) {
         toast.success(isEditing ? 'Schedule updated' : 'Schedule added');
         setShowModal(false);
@@ -223,7 +224,6 @@ const Schedule = () => {
         await loadData();
       }
     } catch (error) {
-      // Catch 403 for attendance-linked schedules
       if (error.response?.status === 403) {
         toast.error(error.response.data.error || 'Cannot modify: Attendance recorded.');
       } else if (error.response?.status === 409) {
@@ -234,36 +234,33 @@ const Schedule = () => {
     }
   };
 
-  // Delete with confirmation modal
   const openDeleteConfirm = (id) => {
     setDeleteTargetId(id);
     setShowDeleteConfirm(true);
   };
 
- const confirmDelete = async () => {
-  if (!deleteTargetId) return;
-  console.log("Attempting to delete schedule ID:", deleteTargetId); // Debugging
-  try {
-    const res = await axios.delete(`${API_BASE}/schedules/${deleteTargetId}`, getAuthHeaders());
-    if (res.status === 200) {
-        toast.success('Schedule deleted');
-        loadData();
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    try {
+      await axios.delete(`${API_BASE}/schedules/${deleteTargetId}`, getAuthHeaders());
+      toast.success('Schedule deleted');
+      loadData();
+    } catch (error) {
+      console.error("Delete Error:", error);
+      toast.error('Failed to delete schedule.');
+    } finally {
+      setShowDeleteConfirm(false);
+      setDeleteTargetId(null);
     }
-  } catch (error) {
-    console.error("Delete Error:", error);
-    toast.error('Failed to delete schedule.');
-  } finally {
-    setShowDeleteConfirm(false);
-    setDeleteTargetId(null);
-  }
-};
+  };
 
-  // Schedule requests
   const fetchPendingRequests = async () => {
     try {
       const res = await axios.get(`${API_BASE}/schedule-requests/pending`, getAuthHeaders());
       setPendingRequests(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const openRejectModal = (id) => {
@@ -315,10 +312,14 @@ const Schedule = () => {
             <span>{formatDateRange()}</span>
             <div style={{ display: 'flex', gap: '16px', marginLeft: '1.5rem' }}>
               <ChevronLeft size={24} className="nav-arrow" onClick={() => {
-                const prev = new Date(currentDate); prev.setDate(prev.getDate() - 7); setCurrentDate(prev);
+                const prev = new Date(currentDate);
+                prev.setDate(prev.getDate() - 7);
+                setCurrentDate(prev);
               }} />
               <ChevronRight size={24} className="nav-arrow" onClick={() => {
-                const next = new Date(currentDate); next.setDate(next.getDate() + 7); setCurrentDate(next);
+                const next = new Date(currentDate);
+                next.setDate(next.getDate() + 7);
+                setCurrentDate(next);
               }} />
             </div>
           </div>
@@ -352,122 +353,113 @@ const Schedule = () => {
         </div>
       </div>
 
-      {/* Weekly Table (unchanged) */}
-      <div className="table-container">
-        <table className="custom-table schedule-table">
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', paddingLeft: '20px' }}>Instructors</th>
-              {weekDaysDates.map(date => (
-                <th key={date.toString()} className="text-center">
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                    {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
-                  </div>
-                  <div style={{ fontSize: '14px' }}>{date.getDate()}</div>
-                </th>
+      {loading ? (
+        <div className="loading-spinner">Loading schedules...</div>
+      ) : (
+        <div className="table-container">
+          <table className="custom-table schedule-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', paddingLeft: '20px' }}>Instructors</th>
+                {weekDaysDates.map(date => (
+                  <th key={date.toString()} className="text-center">
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                      {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '14px' }}>{date.getDate()}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {instructors.map((inst) => (
+                <tr key={inst.employee_id}>
+                  <td style={{ paddingLeft: '20px' }}>
+                    <div className="instructor-name">{inst.full_name}</div>
+                    <div className="instructor-role">{inst.employee_id}</div>
+                  </td>
+                  {weekDaysDates.map((dateObj) => {
+                    const colDateStr = getManualDateString(dateObj);
+                    const daySessions = schedules.filter(s =>
+                      String(s.employee_id).trim() === String(inst.employee_id).trim() &&
+                      String(s.schedule_date || '').split('T')[0] === colDateStr
+                    );
+                    if (daySessions.length === 0) {
+                      return (
+                        <td key={colDateStr}>
+                          <div className="no-session-clickable" onClick={() => canEdit && handleQuickAdd(inst, colDateStr)}>
+                            No Scheduled
+                          </div>
+                         </td>
+                      );
+                    }
+                    const pendingSessions = daySessions.filter(s => s.attendance_status !== 'COMPLETED');
+                    const displaySession = pendingSessions.length > 0 ? pendingSessions[0] : daySessions[0];
+                    const isCompleted = displaySession.attendance_status === 'COMPLETED';
+                    const totalCount = daySessions.length;
+                    return (
+                      <td key={colDateStr} style={{ verticalAlign: 'top', padding: '4px' }}>
+                        <div
+                          className="green-block"
+                          onClick={() => { setDetailSession(daySessions); setShowDetailModal(true); }}
+                          style={{
+                            cursor: 'pointer',
+                            backgroundColor: isCompleted ? '#64748b' : '#00897B',
+                            position: 'relative',
+                            marginBottom: '6px'
+                          }}
+                        >
+                          {totalCount > 1 && (
+                            <div style={{
+                              position: 'absolute', top: -8, right: -8,
+                              background: '#EF4444', color: 'white', borderRadius: '50%',
+                              width: 20, height: 20, fontSize: '10px', fontWeight: 'bold',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}>
+                              {totalCount}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '10px', color: 'white', fontWeight: 'bold' }}>
+                              {displaySession.start_time?.substring(0,5)} – {displaySession.end_time?.substring(0,5)}
+                            </span>
+                            {canEdit && (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <Edit3 size={12} color="white" style={{ cursor: 'pointer' }}
+                                       onClick={(e) => { e.stopPropagation(); handleEditClick(displaySession); }} />
+                                <Trash2 size={12} color="white" style={{ cursor: 'pointer' }}
+                                       onClick={(e) => { e.stopPropagation(); openDeleteConfirm(displaySession.schedule_id); }} />
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'white', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {displaySession.course || 'No Course'}
+                          </div>
+                          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.9)' }}>
+                            {totalCount > 1 ? `${totalCount} total sessions` : (displaySession.place || 'No Room')}
+                          </div>
+                          {isCompleted && (
+                            <div style={{
+                              marginTop: '6px', fontSize: '9px', fontWeight: '800',
+                              color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.2)',
+                              padding: '2px 4px', borderRadius: '4px', textAlign: 'center',
+                              textTransform: 'uppercase'
+                            }}>
+                              Completed
+                            </div>
+                          )}
+                        </div>
+                       </td>
+                    );
+                  })}
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-  {instructors.map((inst) => (
-    <tr key={inst.employee_id}>
-      <td style={{ paddingLeft: '20px' }}>
-        <div className="instructor-name">{inst.full_name}</div>
-        <div className="instructor-role">{inst.employee_id}</div>
-      </td>
-      {weekDaysDates.map((dateObj) => {
-        const colDateStr = getManualDateString(dateObj);
-        const daySessions = schedules.filter(s =>
-          String(s.employee_id).trim() === String(inst.employee_id).trim() &&
-          String(s.schedule_date || '').split('T')[0] === colDateStr
-        );
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        if (daySessions.length === 0) {
-          return (
-            <td key={colDateStr}>
-              <div className="no-session-clickable" onClick={() => canEdit && handleQuickAdd(inst, colDateStr)}>
-                No Scheduled
-              </div>
-            </td>
-          );
-        }
-
-        // --- NEW LOGIC: Filter for pending vs completed ---
-        const pendingSessions = daySessions.filter(s => s.attendance_status !== 'COMPLETED');
-        
-        // Use a pending session if available, otherwise fall back to the first session (which is completed)
-        const displaySession = pendingSessions.length > 0 ? pendingSessions[0] : daySessions[0];
-        const isCompleted = displaySession.attendance_status === 'COMPLETED';
-        const totalCount = daySessions.length;
-
-        return (
-          <td key={colDateStr} style={{ verticalAlign: 'top', padding: '4px' }}>
-            <div 
-              className="green-block"
-              onClick={() => { setDetailSession(daySessions); setShowDetailModal(true); }}
-              style={{ 
-                cursor: 'pointer', 
-                backgroundColor: isCompleted ? '#64748b' : '#00897B',
-                position: 'relative',
-                marginBottom: '6px'
-              }}
-            >
-              {/* Badge for total sessions */}
-              {totalCount > 1 && (
-                <div style={{ 
-                  position: 'absolute', top: -8, right: -8, 
-                  background: '#EF4444', color: 'white', borderRadius: '50%', 
-                  width: 20, height: 20, fontSize: '10px', fontWeight: 'bold',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                }}>
-                  {totalCount}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontSize: '10px', color: 'white', fontWeight: 'bold' }}>
-                  {displaySession.start_time?.substring(0,5)} – {displaySession.end_time?.substring(0,5)}
-                </span>
-                {canEdit && (
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <Edit3 size={12} color="white" style={{ cursor:'pointer' }}
-                           onClick={(e) => { e.stopPropagation(); handleEditClick(displaySession); }} />
-                    <Trash2 size={12} color="white" style={{ cursor:'pointer' }}
-                           onClick={(e) => { e.stopPropagation(); openDeleteConfirm(displaySession.schedule_id); }} />
-                  </div>
-                )}
-              </div>
-              
-              <div style={{ fontSize: '11px', color: 'white', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {displaySession.course || 'No Course'}
-              </div>
-              
-              <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.9)' }}>
-                {totalCount > 1 ? `${totalCount} total sessions` : (displaySession.place || 'No Room')}
-              </div>
-
-              {isCompleted && (
-                <div style={{ 
-                  marginTop: '6px', fontSize: '9px', fontWeight: '800', 
-                  color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.2)', 
-                  padding: '2px 4px', borderRadius: '4px', textAlign: 'center',
-                  textTransform: 'uppercase'
-                }}>
-                  Completed
-                </div>
-              )}
-            </div>
-          </td>
-        );
-      })}
-    </tr>
-  ))}
-</tbody>
-        </table>
-      </div>
-
-      {/* Add/Edit Schedule Modal */}
       {canEdit && (
         <FormalModal
           show={showModal}
@@ -512,29 +504,27 @@ const Schedule = () => {
 
             <div className="modal-form-group" style={{ marginTop: '1rem' }}>
               <label className="modal-label">Course / Subject</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <select name="course" className="modal-select" value={formData.course} onChange={handleInputChange} required style={{ flex: 1 }}>
-                  <option value="">Select Course</option>
-                  {courses.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <select name="course" className="modal-select" value={formData.course} onChange={handleInputChange} required>
+                <option value="">Select Course</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="form-row-grid" style={{ marginTop: '1rem' }}>
               <div className="modal-form-group">
                 <label className="modal-label">Start Time</label>
-                <input type="time" name="start_time" className="modal-input" value={formData.start_time} onChange={handleInputChange} required />
+                <input type="time" name="start_time" className="modal-input" value={formData.start_time} onChange={handleInputChange} required step="60" />
               </div>
               <div className="modal-form-group">
                 <label className="modal-label">End Time</label>
-                <input type="time" name="end_time" className="modal-input" value={formData.end_time} onChange={handleInputChange} required />
+                <input type="time" name="end_time" className="modal-input" value={formData.end_time} onChange={handleInputChange} required step="60" />
               </div>
             </div>
 
             {hasConflict && (
-              <div style={{ marginTop: '1rem', padding: '10px', background: '#fee2e2', borderRadius: '8px', color: '#b91c1c', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="conflict-warning">
                 <ShieldAlert size={18} /> Time conflict – please adjust.
               </div>
             )}
@@ -542,76 +532,54 @@ const Schedule = () => {
         </FormalModal>
       )}
 
-      <FormalModal show={showDetailModal} onClose={() => setShowDetailModal(false)} title="Schedule Details for the Day">
-  {Array.isArray(detailSession) && detailSession.length > 0 ? (
-    detailSession.map((s, idx) => (
-      <div key={s.schedule_id || idx} style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px' }}>
-        <div className="detail-row">
-          <span className="detail-label">Course</span>
-          <span className="detail-value">{s.course}</span>
-        </div>
-        <div className="detail-row">
-          <span className="detail-label">Time</span>
-          <span className="detail-value">{s.start_time?.substring(0,5)} – {s.end_time?.substring(0,5)}</span>
-        </div>
-        
-        {/* ADDED LOCATION FIELD HERE */}
-        <div className="detail-row">
-          <span className="detail-label">Location</span>
-          <span className="detail-value">{s.place || 'N/A'}</span>
-        </div>
-
-        <div className="detail-row">
-          <span className="detail-label">Status</span>
-          <span style={{ 
-            fontWeight: '800', 
-            color: s.attendance_status === 'COMPLETED' ? '#059669' : '#d97706',
-            padding: '2px 6px', 
-            borderRadius: '4px',
-            backgroundColor: s.attendance_status === 'COMPLETED' ? '#DCFCE7' : 'transparent'
-          }}>
-            {s.attendance_status || 'Scheduled'}
-          </span>
-        </div>
-      </div>
-    ))
-  ) : (
-    <p>No schedule details available.</p>
-  )}
-</FormalModal>
+      <FormalModal show={showDetailModal} onClose={() => setShowDetailModal(false)} title="Schedule Details for the Day" wide>
+        {Array.isArray(detailSession) && detailSession.length > 0 ? (
+          detailSession.map((s, idx) => (
+            <div key={s.schedule_id || idx} className="detail-session">
+              <div className="detail-row">
+                <span className="detail-label">Course</span>
+                <span className="detail-value">{s.course}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Time</span>
+                <span className="detail-value">{s.start_time?.substring(0,5)} – {s.end_time?.substring(0,5)}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Location</span>
+                <span className="detail-value">{s.place || 'N/A'}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Status</span>
+                <span className={`status-value ${s.attendance_status === 'COMPLETED' ? 'status-completed' : s.attendance_status === 'IN PROGRESS' ? 'status-inprogress' : 'status-scheduled'}`}>
+                  {s.attendance_status === 'COMPLETED' ? 'COMPLETED' : (s.attendance_status === 'IN PROGRESS' ? 'NOT COMPLETED' : (s.attendance_status || 'Scheduled'))}
+                </span>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p>No schedule details available.</p>
+        )}
+      </FormalModal>
 
       {/* Schedule Requests Modal */}
       <FormalModal
         show={showScheduleRequests}
         onClose={() => setShowScheduleRequests(false)}
         title="Pending Schedule Requests"
+        wide
       >
         {pendingRequests.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No pending requests.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="pending-requests-list">
             {pendingRequests.map(req => (
-              <div key={req.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem' }}>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong>{req.full_name}</strong> – {req.request_type === 'new' ? 'New Schedule' : 'Change Existing'} on {req.date}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#334155', marginBottom: '0.5rem' }}>
-                  {req.course} at {req.place} ({req.start_time} – {req.end_time})
-                </div>
-                {req.reason && (
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                    Reason: {req.reason}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => handleProcessRequest(req.id, 'approved')}
-                          style={{ padding: '0.4rem 1rem', borderRadius: 6, border: 'none', background: '#059669', color: 'white', fontWeight: 600, cursor: 'pointer' }}>
-                    Approve
-                  </button>
-                  <button onClick={() => handleProcessRequest(req.id, 'rejected')}
-                          style={{ padding: '0.4rem 1rem', borderRadius: 6, border: 'none', background: '#dc2626', color: 'white', fontWeight: 600, cursor: 'pointer' }}>
-                    Reject
-                  </button>
+              <div key={req.id} className="pending-request-card">
+                <div><strong>{req.full_name}</strong> – {req.request_type === 'new' ? 'New Schedule' : 'Change Existing'} on {req.date}</div>
+                <div>{req.course} at {req.place} ({req.start_time} – {req.end_time})</div>
+                {req.reason && <div className="request-reason">Reason: {req.reason}</div>}
+                <div className="request-actions">
+                  <button className="btn-approve-req" onClick={() => handleProcessRequest(req.id, 'approved')}>Approve</button>
+                  <button className="btn-reject-req" onClick={() => handleProcessRequest(req.id, 'rejected')}>Reject</button>
                 </div>
               </div>
             ))}

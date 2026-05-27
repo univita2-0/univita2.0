@@ -62,6 +62,8 @@ const RequestsScreen = ({ navigation, route }) => {
   const [submittingOvertime, setSubmittingOvertime] = useState(false);
   const [showOvertimeCalendar, setShowOvertimeCalendar] = useState(false);
   const [overtimeScenario, setOvertimeScenario] = useState('future');
+  const [appealTimeIn, setAppealTimeIn] = useState('');
+  const [appealTimeOut, setAppealTimeOut] = useState('');
 
   const getTodayString = () => new Date().toISOString().split('T')[0];
   const todayStr = getTodayString();
@@ -236,34 +238,45 @@ const RequestsScreen = ({ navigation, route }) => {
   };
 
   const submitAppeal = async () => {
-    if (!appealDate) { Alert.alert('Required', 'Select a date.'); return; }
-    if (!appealReason.trim()) { Alert.alert('Required', 'Provide a reason.'); return; }
-    setSubmittingAppeal(true);
-    try {
-      const userId = await AsyncStorage.getItem('user_id');
-      const formData = new FormData();
-      formData.append('user_id', userId);
-      formData.append('date', appealDate);
-      formData.append('reason', appealReason.trim());
-      if (appealImage) {
-        const filename = appealImage.split('/').pop();
-        const fileType = filename.split('.').pop();
-        formData.append('image', { uri: appealImage, name: filename, type: `image/${fileType}` });
-      }
-      const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`${API_URL}/attendance-appeals`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token || ''}` },
-        body: formData,
-      });
-      const result = await response.json();
-      if (result.success) {
-        Alert.alert('Appeal Submitted', 'Your appeal has been sent.');
-        setAppealDate(''); setAppealReason(''); setAppealImage(null);
-      } else Alert.alert('Error', result.message || 'Failed.');
-    } catch (error) { Alert.alert('Error', 'Network error.'); }
-    finally { setSubmittingAppeal(false); }
-  };
+  if (!appealDate) { Alert.alert('Required', 'Select a date.'); return; }
+  if (!appealReason.trim()) { Alert.alert('Required', 'Provide a reason.'); return; }
+  setSubmittingAppeal(true);
+  try {
+    const userId = await AsyncStorage.getItem('user_id');
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('date', appealDate);
+    formData.append('reason', appealReason.trim());
+    if (appealTimeIn) formData.append('time_in', appealTimeIn);
+    if (appealTimeOut) formData.append('time_out', appealTimeOut);
+    if (appealImage) {
+      const filename = appealImage.split('/').pop();
+      const fileType = filename.split('.').pop();
+      formData.append('image', { uri: appealImage, name: filename, type: `image/${fileType}` });
+    }
+    const token = await AsyncStorage.getItem('auth_token');
+    const response = await fetch(`${API_URL}/attendance-appeals`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token || ''}` },
+      body: formData,
+    });
+    const result = await response.json();
+    if (result.success) {
+      Alert.alert('Appeal Submitted', 'Your appeal has been sent.');
+      setAppealDate('');
+      setAppealTimeIn('');
+      setAppealTimeOut('');
+      setAppealReason('');
+      setAppealImage(null);
+    } else {
+      Alert.alert('Error', result.error || result.message || 'Failed.');
+    }
+  } catch (error) {
+    Alert.alert('Error', 'Network error.');
+  } finally {
+    setSubmittingAppeal(false);
+  }
+};
 
   // ----- Correction (with prefill) -----
   const takeSelfie = async () => {
@@ -500,32 +513,54 @@ const RequestsScreen = ({ navigation, route }) => {
 
           {/* Appeal Tab (unchanged) */}
           {activeTab === 'appeal' && (
-            <View>
-              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('AppealHistory')}>
-                <Text style={styles.historyButtonText}>View Appeal History</Text>
-              </TouchableOpacity>
+  <View>
+    <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('AppealHistory')}>
+      <Text style={styles.historyButtonText}>View Appeal History</Text>
+    </TouchableOpacity>
 
-              <Text style={styles.label}>Date</Text>
-              <TouchableOpacity style={styles.datePicker} onPress={() => setShowAppealCalendar(true)}>
-                <CalendarIcon size={20} color="#00897B" />
-                <Text style={styles.dateText}>{appealDate || 'Select date'}</Text>
-              </TouchableOpacity>
-              {renderCalendar(showAppealCalendar, setShowAppealCalendar, appealDate, setAppealDate)}
+    <Text style={styles.label}>Date</Text>
+    <TouchableOpacity style={styles.datePicker} onPress={() => setShowAppealCalendar(true)}>
+      <CalendarIcon size={20} color="#00897B" />
+      <Text style={styles.dateText}>{appealDate || 'Select date'}</Text>
+    </TouchableOpacity>
+    {renderCalendar(showAppealCalendar, setShowAppealCalendar, appealDate, setAppealDate, todayStr, todayStr)}
 
-              <Text style={styles.label}>Reason</Text>
-              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Explain why you couldn't clock in/out..." value={appealReason} onChangeText={setAppealReason} />
+    <Text style={styles.label}>Time In (optional)</Text>
+    <TextInput
+      style={styles.input}
+      placeholder="HH:MM (e.g., 09:00)"
+      value={appealTimeIn}
+      onChangeText={setAppealTimeIn}
+    />
 
-              <Text style={styles.label}>Proof (optional)</Text>
-              <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setAppealImage)}>
-                <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{appealImage ? 'Change Image' : 'Upload'}</Text>
-              </TouchableOpacity>
-              {appealImage && <Image source={{ uri: appealImage }} style={styles.previewImage} />}
+    <Text style={styles.label}>Time Out (optional)</Text>
+    <TextInput
+      style={styles.input}
+      placeholder="HH:MM (e.g., 17:00)"
+      value={appealTimeOut}
+      onChangeText={setAppealTimeOut}
+    />
 
-              <TouchableOpacity style={styles.submitBtn} onPress={submitAppeal} disabled={submittingAppeal}>
-                <Text style={styles.submitBtnText}>{submittingAppeal ? 'Submitting...' : 'Submit Appeal'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+    <Text style={styles.label}>Reason</Text>
+    <TextInput
+      style={[styles.input, styles.textArea]}
+      multiline
+      placeholder="Explain why you couldn't clock in/out..."
+      value={appealReason}
+      onChangeText={setAppealReason}
+    />
+
+    <Text style={styles.label}>Proof (optional)</Text>
+    <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setAppealImage)}>
+      <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{appealImage ? 'Change Image' : 'Upload'}</Text>
+    </TouchableOpacity>
+    {appealImage && <Image source={{ uri: appealImage }} style={styles.previewImage} />}
+
+    <TouchableOpacity style={styles.submitBtn} onPress={submitAppeal} disabled={submittingAppeal}>
+      <Text style={styles.submitBtnText}>{submittingAppeal ? 'Submitting...' : 'Submit Appeal'}</Text>
+    </TouchableOpacity>
+  </View>
+)}
 
           {/* Correction Tab (unchanged) */}
           {activeTab === 'correction' && (
@@ -535,7 +570,7 @@ const RequestsScreen = ({ navigation, route }) => {
                 <CalendarIcon size={20} color="#00897B" />
                 <Text style={styles.dateText}>{correctionDate || 'Select date'}</Text>
               </TouchableOpacity>
-              {renderCalendar(showCorrectionCalendar, setShowCorrectionCalendar, correctionDate, setCorrectionDate)}
+              {renderCalendar(showCorrectionCalendar, setShowCorrectionCalendar, correctionDate, setCorrectionDate, todayStr, todayStr)}
 
               <Text style={styles.label}>What to correct?</Text>
               <View style={styles.typeGroup}>

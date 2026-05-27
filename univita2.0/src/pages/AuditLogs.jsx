@@ -1,7 +1,6 @@
-// src/pages/AuditLogs.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Search, Download, Calendar, Filter } from 'lucide-react';
+import { Search, Download, Calendar, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import './AuditLogs.css';
 import { API_BASE } from '../api';
@@ -15,8 +14,12 @@ const AuditLogs = () => {
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
   useEffect(() => {
     fetchLogs();
@@ -48,29 +51,49 @@ const AuditLogs = () => {
       filtered = filtered.filter(log =>
         log.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.action?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.target_type?.toLowerCase().includes(searchTerm.toLowerCase())
+        log.target_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.ip_address?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    if (dateFilter) {
-      filtered = filtered.filter(log => log.created_at?.startsWith(dateFilter));
+    if (dateFrom) {
+      filtered = filtered.filter(log => log.created_at >= dateFrom);
+    }
+    if (dateTo) {
+      const endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      const endDateStr = endDate.toISOString().split('T')[0];
+      filtered = filtered.filter(log => log.created_at < endDateStr);
     }
     if (actionFilter) {
       filtered = filtered.filter(log => log.action === actionFilter);
     }
     setFilteredLogs(filtered);
-  }, [searchTerm, dateFilter, actionFilter, logs]);
+    setCurrentPage(1);
+  }, [searchTerm, dateFrom, dateTo, actionFilter, logs]);
+
+  const formatChanges = (oldVal, newVal) => {
+    if (!oldVal && !newVal) return '—';
+    if (oldVal && !newVal) return `Removed: ${JSON.stringify(oldVal).substring(0, 60)}`;
+    if (!oldVal && newVal) return `Added: ${JSON.stringify(newVal).substring(0, 60)}`;
+    return `Changed: ${JSON.stringify(oldVal).substring(0, 40)} → ${JSON.stringify(newVal).substring(0, 40)}`;
+  };
+
+  const totalLogs = filteredLogs.length;
+  const totalPages = Math.ceil(totalLogs / rowsPerPage);
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const uniqueActions = useMemo(() => [...new Set(logs.map(log => log.action))], [logs]);
 
   const exportCSV = () => {
-    const headers = ['Timestamp', 'User', 'Action', 'Target Type', 'Target ID', 'IP Address'];
+    const headers = ['Timestamp', 'User', 'Action', 'Resource', 'Changes', 'IP Address'];
     const rows = filteredLogs.map(log => [
       log.created_at,
       log.user_email || 'System',
       log.action,
       log.target_type || '',
-      log.target_id || '',
+      formatChanges(log.old_value, log.new_value).replace(/[➕🗑️✏️]/g, '').trim(),
       log.ip_address || ''
     ]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -81,37 +104,56 @@ const AuditLogs = () => {
     toast.info('CSV export started');
   };
 
-  const uniqueActions = [...new Set(logs.map(log => log.action))];
-
   return (
     <div className="audit-container">
       <div className="audit-header">
-        <h2>Audit Logs</h2>
+        <div>
+          <h1>Audit Logs</h1>
+          <p className="audit-description">Complete history of system actions and data changes</p>
+        </div>
         <button className="btn-export" onClick={exportCSV}>
-          <Download size={16} /> Export CSV
+          <Download size={16} /> Export to CSV
         </button>
       </div>
 
-      <div className="audit-filters">
-        <div className="filter-group">
-          <Search size={16} />
+      {/* Filters Section */}
+      <div className="filters-bar">
+        <div className="filter-item search-filter">
+          <Search size={18} />
           <input
             type="text"
-            placeholder="Search by user, action, target..."
+            placeholder="Search user, action, resource or IP..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="filter-group">
-          <Calendar size={16} />
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value)}
-          />
+
+        <div className="filter-item date-filter">
+          <Calendar size={18} />
+          <div className="date-input-group">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              placeholder="From"
+            />
+            <span>–</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              placeholder="To"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <button className="clear-dates" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+              Clear
+            </button>
+          )}
         </div>
-        <div className="filter-group">
-          <Filter size={16} />
+
+        <div className="filter-item action-filter">
+          <Filter size={18} />
           <select value={actionFilter} onChange={e => setActionFilter(e.target.value)}>
             <option value="">All Actions</option>
             {uniqueActions.map(action => (
@@ -121,39 +163,72 @@ const AuditLogs = () => {
         </div>
       </div>
 
+      {/* Table */}
       {loading ? (
-        <div className="loading-spinner">Loading audit logs...</div>
+        <div className="loading-state">Loading audit logs...</div>
       ) : (
-        <div className="audit-table-wrapper">
-          <table className="audit-table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Target Type</th>
-                <th>Target ID</th>
-                <th>IP Address</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLogs.length === 0 ? (
-                <tr><td colSpan="6" className="empty-row">No audit logs found.</td></tr>
-              ) : (
-                filteredLogs.map(log => (
-                  <tr key={log.id}>
-                    <td>{new Date(log.created_at).toLocaleString()}</td>
-                    <td>{log.user_email || 'System'}</td>
-                    <td><span className="action-badge">{log.action}</span></td>
-                    <td>{log.target_type || '—'}</td>
-                    <td>{log.target_id || '—'}</td>
-                    <td>{log.ip_address || '—'}</td>
+        <>
+          <div className="table-wrapper">
+            <table className="audit-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Resource</th>
+                  <th>Changes</th>
+                  <th>IP Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedLogs.length === 0 ? (
+                  <tr className="empty-row">
+                    <td colSpan="6">No audit records found. Try adjusting your filters.</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  paginatedLogs.map(log => (
+                    <tr key={log.id}>
+                      <td className="timestamp">{new Date(log.created_at).toLocaleString()}</td>
+                      <td className="user">{log.user_email || 'System'}</td>
+                      <td><span className="action-tag">{log.action}</span></td>
+                      <td className="resource">{log.target_type || '—'}</td>
+                      <td className="changes" title={formatChanges(log.old_value, log.new_value)}>
+                        {formatChanges(log.old_value, log.new_value)}
+                      </td>
+                      <td className="ip">{log.ip_address || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalLogs > 0 && (
+            <div className="pagination-bar">
+              <div className="rows-per-page">
+                <span>Rows per page:</span>
+                <select value={rowsPerPage} onChange={e => setRowsPerPage(Number(e.target.value))}>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+              <div className="pagination-controls">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="page-indicator">
+                  Page {currentPage} of {totalPages || 1}
+                </span>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

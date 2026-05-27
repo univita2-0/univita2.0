@@ -1,4 +1,3 @@
-// src/pages/PayrollHistory.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Search, Printer, Filter } from 'lucide-react';
@@ -36,8 +35,19 @@ const PayrollHistory = ({ setView }) => {
     return matchesName && matchesMonth;
   });
 
-  const formatPHP = (num) =>
-    Number(num).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Safe number formatting for currency
+  const formatPHP = (num) => {
+    const value = parseFloat(num);
+    if (isNaN(value)) return '0.00';
+    return value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Safe formatting for total hours
+  const formatHours = (hours) => {
+    const value = parseFloat(hours);
+    if (isNaN(value)) return '0.00';
+    return value.toFixed(2);
+  };
 
   const handlePrint = () => {
     window.print();
@@ -97,7 +107,7 @@ const PayrollHistory = ({ setView }) => {
                     <td className="font-medium">{record.month_year}</td>
                     <td className="font-semibold">{record.full_name}</td>
                     <td>₱{formatPHP(record.salary_rate)}</td>
-                    <td>{record.total_hours} hrs</td>
+                    <td>{formatHours(record.total_hours)} hrs</td>
                     <td>₱{formatPHP(record.gross_pay)}</td>
                     <td className="tax-text">-₱{formatPHP(record.tax_deduction)}</td>
                     <td className="net-pay-text">₱{formatPHP(record.net_pay)}</td>

@@ -27,6 +27,40 @@ const OTP_STORE = {};          // email -> { otp, expiresAt }
 const PIN_ATTEMPTS = new Map(); // email -> { count, lastAttempt }
 const wsClients = new Map();    // userId -> WebSocket
 
+// Helper: check if a date is within allowed range (max 30 days ago)
+const isDateWithinAllowedRange = (dateStr) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+  const targetDate = new Date(dateStr);
+  targetDate.setHours(0, 0, 0, 0);
+  return targetDate <= today && targetDate >= thirtyDaysAgo;
+};
+
+// Helper: validate schedule exists for an employee on a given date
+const scheduleExistsForDate = async (employeeId, dateStr) => {
+  const [rows] = await db.promise().query(
+    "SELECT id, start_time, end_time FROM schedules WHERE user_id = ? AND date = ?",
+    [employeeId, dateStr]
+  );
+  return rows.length > 0 ? rows[0] : null;
+};
+
+// Helper: check for existing pending/approved appeal or correction
+const hasExistingRequest = async (employeeId, dateStr, type) => {
+  const [appealRows] = await db.promise().query(
+    "SELECT id FROM attendance_appeals WHERE user_id = ? AND date = ? AND status IN ('pending', 'approved')",
+    [employeeId, dateStr]
+  );
+  if (appealRows.length > 0) return true;
+  const [corrRows] = await db.promise().query(
+    "SELECT id FROM attendance_corrections WHERE user_id = ? AND attendance_date = ? AND status IN ('pending', 'approved')",
+    [employeeId, dateStr]
+  );
+  return corrRows.length > 0;
+};
 
 
 // Serve uploaded files (selfies, resumes, etc.) – works both locally and on Hostinger
@@ -452,6 +486,7 @@ app.put('/api/users/:id/reset-password', authenticateToken, (req, res) => {
   db.query("UPDATE users SET password = ?, password_last_changed = CURRENT_DATE WHERE id = ?", [newPassword.trim(), userId], (err, result) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'User not found.' });
+    logAction(req.user.id, 'ADMIN_RESET_PASSWORD', 'user', userId, req);
     res.json({ success: true, message: 'Password reset successfully.' });
   });
 });
@@ -468,7 +503,7 @@ const getPHTime = () => {
 };
 
 app.post('/api/attendance/clock-in', authenticateToken, multerSelfie.single('selfie'), async (req, res) => {
-  const { employee_id, latitude, longitude, schedule_id } = req.body; // Ensure schedule_id is passed
+  const { employee_id, latitude, longitude, schedule_id } = req.body;
   const userId = req.user.id;
   const selfiePath = req.file ? `/uploads/selfies/${req.file.filename}` : null;
 
@@ -494,7 +529,7 @@ app.post('/api/attendance/clock-in', authenticateToken, multerSelfie.single('sel
     if (schedRows.length === 0) return res.status(403).json({ success: false, message: 'No work schedule found' });
     const { place: schedulePlace, start_time: scheduledStartTime } = schedRows[0];
 
-    // 3. Time Validation (Early clock-in allowed, late clock-in allowed)
+    // 3. Time Validation
     const scheduledStart = new Date(`1970-01-01T${scheduledStartTime}`);
     const actualTime = new Date(`1970-01-01T${currentTime}`);
     const diffMinutes = (actualTime - scheduledStart) / 60000;
@@ -518,15 +553,15 @@ app.post('/api/attendance/clock-in', authenticateToken, multerSelfie.single('sel
       return res.status(403).json({ success: false, message: `Not within ${schedulePlace} campus. Distance: ${Math.round(distance)}m` });
     }
 
-    // 5. Check if already clocked in for this specific schedule
+    // 5. Check if already clocked in for this schedule
     const [existing] = await db.promise().query("SELECT id FROM attendance WHERE user_id = ? AND schedule_id = ?", [employee_id, schedule_id]);
     if (existing.length > 0) return res.status(400).json({ success: false, message: 'Already clocked in for this schedule' });
 
-    // 6. Determine Status: If more than 30 mins late, mark as 'late', otherwise 'present'
+    // 6. Determine Status
     const status = diffMinutes > 30 ? 'late' : 'present';
 
-    // 7. Insert attendance (including schedule_id to prevent duplicates)
-    await db.promise().query(
+    // 7. Insert attendance and capture result
+    const [result] = await db.promise().query(
       `INSERT INTO attendance 
         (user_id, schedule_id, date, time_in, status, clock_in_selfie,
          clock_in_latitude, clock_in_longitude, location)
@@ -535,6 +570,9 @@ app.post('/api/attendance/clock-in', authenticateToken, multerSelfie.single('sel
        selfiePath, latitude, longitude,
        `${schedulePlace} (${parseFloat(latitude).toFixed(6)}, ${parseFloat(longitude).toFixed(6)})`]
     );
+
+    // ✅ Audit log – result.insertId is now defined
+    logAction(req.user.id, 'CLOCK_IN', 'attendance', result.insertId, req);
 
     res.json({ success: true, message: `Clocked in as ${status} at ${currentTime}` });
   } catch (err) {
@@ -616,6 +654,7 @@ app.post('/api/attendance/clock-out', authenticateToken, multerSelfie.single('se
     );
 
     await broadcastInstructorStatus(employee_id);
+    logAction(req.user.id, 'CLOCK_OUT', 'attendance', existing[0].id, req);
 
     res.json({ success: true, message: `Clocked out successfully for ${schedulePlace}` });
   } catch (err) {
@@ -633,12 +672,54 @@ app.post('/api/attendance/correction-request', authenticateToken, multerCorrecti
     return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
 
+  // 1. Date validation
+  const today = new Date().toISOString().split('T')[0];
+  if (date > today) {
+    return res.status(400).json({ success: false, message: "Cannot request correction for future dates." });
+  }
+  if (!isDateWithinAllowedRange(date)) {
+    return res.status(400).json({ success: false, message: "Corrections are only allowed for the last 30 days." });
+  }
+
   try {
     const [userRows] = await db.promise().query(
       "SELECT id, employee_id FROM users WHERE id = ? AND employee_id = ? AND status = 'active'",
       [userId, employee_id]
     );
     if (userRows.length === 0) return res.status(403).json({ success: false, message: 'Invalid user' });
+
+    // 2. Schedule existence
+    const schedule = await scheduleExistsForDate(employee_id, date);
+    if (!schedule) {
+      return res.status(400).json({ success: false, message: "No schedule found for this date. Correction not allowed." });
+    }
+
+    // 3. Duplicate check
+    if (await hasExistingRequest(employee_id, date, 'correction')) {
+      return res.status(409).json({ success: false, message: "You already have a pending or approved request for this date." });
+    }
+
+    // 4. Time bounds validation
+    const requestedTime = time;
+    if (type === 'clock_in') {
+      if (requestedTime < schedule.start_time || requestedTime > schedule.end_time) {
+        return res.status(400).json({ success: false, message: `Clock-in time must be between ${schedule.start_time} and ${schedule.end_time}.` });
+      }
+    } else if (type === 'clock_out') {
+      // For clock-out, we need the existing clock-in time (if any)
+      const [attRecord] = await db.promise().query(
+        "SELECT time_in FROM attendance WHERE user_id = ? AND schedule_id = ?",
+        [employee_id, schedule.id]
+      );
+      if (attRecord.length > 0 && attRecord[0].time_in) {
+        if (requestedTime <= attRecord[0].time_in) {
+          return res.status(400).json({ success: false, message: "Clock-out time must be after clock-in time." });
+        }
+      }
+      if (requestedTime > schedule.end_time) {
+        return res.status(400).json({ success: false, message: `Clock-out time cannot exceed shift end (${schedule.end_time}).` });
+      }
+    }
 
     await db.promise().query(
       `INSERT INTO attendance_corrections 
@@ -709,6 +790,7 @@ app.put('/api/attendance/corrections/:id/review', authenticateToken, async (req,
         values.push(existing[0].id);
         await db.promise().query(`UPDATE attendance SET ${updates.join(', ')} WHERE id = ?`, values);
       }
+      logAction(req.user.id, 'APPROVE_CORRECTION', 'attendance_correction', id, req);
     }
     res.json({ success: true });
   } catch (err) {
@@ -732,22 +814,53 @@ app.get('/api/attendance-appeals/user/:employeeId', async (req, res) => {
   );
 });
 
-app.post('/api/attendance-appeals', authenticateToken, uploadAppeal.single('image'), (req, res) => {
-  const { date, reason } = req.body;
+app.post('/api/attendance-appeals', authenticateToken, uploadAppeal.single('image'), async (req, res) => {
+  const { date, reason, time_in, time_out } = req.body; // added optional time_in, time_out
   const userId = req.user.id;
-  db.query("SELECT employee_id FROM users WHERE id = ?", [userId], (err, rows) => {
-    if (err || rows.length === 0) return res.status(500).json({ success: false, error: "User not found" });
-    const employee_id = rows[0].employee_id;
+
+  // 1. Date validation
+  const today = new Date().toISOString().split('T')[0];
+  if (date > today) {
+    return res.status(400).json({ success: false, error: "Cannot appeal for future dates." });
+  }
+  if (!isDateWithinAllowedRange(date)) {
+    return res.status(400).json({ success: false, error: "Appeals are only allowed for the last 30 days." });
+  }
+
+  try {
+    const [userRows] = await db.promise().query("SELECT employee_id FROM users WHERE id = ?", [userId]);
+    if (userRows.length === 0) return res.status(500).json({ success: false, error: "User not found" });
+    const employee_id = userRows[0].employee_id;
+
+    // 2. Schedule existence check
+    const schedule = await scheduleExistsForDate(employee_id, date);
+    if (!schedule) {
+      return res.status(400).json({ success: false, error: "No schedule found for this date. Cannot submit appeal." });
+    }
+
+    // 3. Duplicate check
+    if (await hasExistingRequest(employee_id, date, 'appeal')) {
+      return res.status(409).json({ success: false, error: "You already have a pending or approved request for this date." });
+    }
+
     const image_url = req.file ? `/uploads/attendance_appeals/${req.file.filename}` : null;
-    db.query(
-      "INSERT INTO attendance_appeals (user_id, date, reason, image_url, status) VALUES (?, ?, ?, ?, 'pending')",
-      [employee_id, date, reason, image_url],
-      (err) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
-        res.json({ success: true });
-      }
+
+    // Store optional time_in/time_out (if not provided, will be NULL)
+    const appealTimeIn = time_in || null;
+    const appealTimeOut = time_out || null;
+
+    const [result] = await db.promise().query(
+      `INSERT INTO attendance_appeals (user_id, date, reason, image_url, status, requested_time_in, requested_time_out)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+      [employee_id, date, reason, image_url, appealTimeIn, appealTimeOut]
     );
-  });
+
+    logAction(req.user.id, 'SUBMIT_APPEAL', 'attendance_appeal', result.insertId, req);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/attendance-appeals/pending', authenticateToken, (req, res) => {
@@ -761,43 +874,64 @@ app.get('/api/attendance-appeals/pending', authenticateToken, (req, res) => {
   );
 });
 
-app.put('/api/attendance-appeals/:id/status', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') return res.status(403).json({ error: 'Forbidden' });
+app.put('/api/attendance-appeals/:id/status', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { status, admin_remarks } = req.body;
   const appealId = req.params.id;
 
-  db.query("SELECT user_id, date FROM attendance_appeals WHERE id = ?", [appealId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (rows.length === 0) return res.status(404).json({ error: "Appeal not found" });
-    const { user_id, date } = rows[0];
+  try {
+    const [appealRows] = await db.promise().query(
+      "SELECT user_id, date, requested_time_in, requested_time_out FROM attendance_appeals WHERE id = ?",
+      [appealId]
+    );
+    if (appealRows.length === 0) return res.status(404).json({ error: "Appeal not found" });
+    const { user_id, date, requested_time_in, requested_time_out } = appealRows[0];
 
-    db.query("SELECT start_time, end_time FROM schedules WHERE user_id = ? AND date = ?", [user_id, date], (err, scheduleRows) => {
-      let start_time = null, end_time = null, total_hours = 0;
-      if (scheduleRows.length > 0) {
-        start_time = scheduleRows[0].start_time;
-        end_time = scheduleRows[0].end_time;
-        if (start_time && end_time) total_hours = (new Date(`1970-01-01T${end_time}`) - new Date(`1970-01-01T${start_time}`)) / 3600000;
+    // Get schedule times as fallback
+    const schedule = await scheduleExistsForDate(user_id, date);
+    let start_time = requested_time_in || (schedule ? schedule.start_time : null);
+    let end_time = requested_time_out || (schedule ? schedule.end_time : null);
+    let total_hours = 0;
+    if (start_time && end_time) {
+      total_hours = (new Date(`1970-01-01T${end_time}`) - new Date(`1970-01-01T${start_time}`)) / 3600000;
+    }
+
+    // Update appeal status
+    await db.promise().query(
+      "UPDATE attendance_appeals SET status = ?, admin_remarks = ? WHERE id = ?",
+      [status, admin_remarks || null, appealId]
+    );
+    const action = status === 'approved' ? 'APPROVE_APPEAL' : 'REJECT_APPEAL';
+    logAction(req.user.id, action, 'attendance_appeal', appealId, req);
+
+    if (status === 'approved') {
+      // Check if attendance already exists for that date
+      const [existingAtt] = await db.promise().query(
+        "SELECT id FROM attendance WHERE user_id = ? AND date = ?",
+        [user_id, date]
+      );
+      if (existingAtt.length > 0) {
+        // If attendance exists, update it with the approved times (overwrite)
+        await db.promise().query(
+          `UPDATE attendance SET time_in = ?, time_out = ?, status = 'Present', total_hours = ?, location = 'Appeal Approved'
+           WHERE id = ?`,
+          [start_time, end_time, total_hours, existingAtt[0].id]
+        );
+      } else {
+        await db.promise().query(
+          `INSERT INTO attendance (user_id, date, time_in, time_out, status, location, total_hours)
+           VALUES (?, ?, ?, ?, 'Present', 'Appeal Approved', ?)`,
+          [user_id, date, start_time, end_time, total_hours]
+        );
       }
-      db.query("UPDATE attendance_appeals SET status = ?, admin_remarks = ? WHERE id = ?", [status, admin_remarks || null, appealId], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (status === 'approved') {
-          db.query(
-            `INSERT INTO attendance (user_id, date, time_in, time_out, status, location, total_hours)
-             VALUES (?, ?, ?, ?, 'Present', 'Appeal Approved', ?)
-             ON DUPLICATE KEY UPDATE time_in = VALUES(time_in), time_out = VALUES(time_out),
-             status = 'Present', location = 'Appeal Approved', total_hours = VALUES(total_hours)`,
-            [user_id, date, start_time, end_time, total_hours],
-            (err) => {
-              if (err) console.error("Failed to upsert attendance:", err);
-              res.json({ success: true });
-            }
-          );
-        } else {
-          res.json({ success: true });
-        }
-      });
-    });
-  });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/attendance-appeals/history', authenticateToken, (req, res) => {
@@ -987,33 +1121,47 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const { title, date, place, start_time, end_time, type, description } = req.body;
   db.query(
     "INSERT INTO events (title, date, place, start_time, end_time, type, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [title, date, place, start_time, end_time, type, description],
-    (err) => {
+    (err, result) => {
       if (err) return res.status(500).json({ success: false, error: err.message });
+      logAction(req.user.id, 'CREATE_EVENT', 'event', result.insertId, req);
       res.json({ success: true });
     }
   );
 });
 
-app.put('/api/events/:id', (req, res) => {
+app.put('/api/events/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const { title, date, place, start_time, end_time, type, description } = req.body;
+  const eventId = req.params.id;
   db.query(
     "UPDATE events SET title=?, date=?, place=?, start_time=?, end_time=?, type=?, description=? WHERE id=?",
-    [title, date, place, start_time, end_time, type, description, req.params.id],
+    [title, date, place, start_time, end_time, type, description, eventId],
     (err) => {
       if (err) return res.status(500).json({ success: false, error: err.message });
+      logAction(req.user.id, 'UPDATE_EVENT', 'event', eventId, req);
       res.json({ success: true });
     }
   );
 });
 
-app.delete('/api/events/:id', (req, res) => {
-  db.query("DELETE FROM events WHERE id = ?", [req.params.id], (err) => {
+app.delete('/api/events/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+  const eventId = req.params.id;
+  db.query("DELETE FROM events WHERE id = ?", [eventId], (err) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
+    logAction(req.user.id, 'DELETE_EVENT', 'event', eventId, req);
     res.json({ success: true });
   });
 });
@@ -1097,22 +1245,49 @@ async function hasScheduleConflict(user_id, date, start_time, end_time, excludeI
   return rows.length > 0;
 }
 
-app.post('/api/schedules', async (req, res) => {
+// POST /api/schedules – Create a new schedule (authenticated, admin/hr only)
+app.post('/api/schedules', authenticateToken, async (req, res) => {
+  // Only admin or hr_admin can create schedules
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+
   const { user_id, date, place, course, start_time, end_time } = req.body;
   const { date: today } = getPHTime();
-  if (date < today) return res.status(400).json({ success: false, error: "Cannot create schedule for a past date." });
-  const [locRows] = await db.promise().query("SELECT id FROM school_locations WHERE name = ?", [place]);
-  if (locRows.length === 0) return res.status(400).json({ success: false, error: "Schedule place must be a registered school location." });
-  if (start_time >= end_time) return res.status(400).json({ success: false, error: "End time must be after start time." });
-  if (await hasScheduleConflict(user_id, date, start_time, end_time)) return res.status(409).json({ success: false, error: "Time conflict." });
-  db.query("INSERT INTO schedules (user_id, date, place, course, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)", [user_id, date, place, course, start_time, end_time], (err) => {
-    if (err) return res.status(500).json({ success: false });
-    res.json({ success: true });
-  });
-});
 
+  if (date < today) {
+    return res.status(400).json({ success: false, error: 'Cannot create schedule for a past date.' });
+  }
+  const [locRows] = await db.promise().query("SELECT id FROM school_locations WHERE name = ?", [place]);
+  if (locRows.length === 0) {
+    return res.status(400).json({ success: false, error: 'Schedule place must be a registered school location.' });
+  }
+  if (start_time >= end_time) {
+    return res.status(400).json({ success: false, error: 'End time must be after start time.' });
+  }
+  if (await hasScheduleConflict(user_id, date, start_time, end_time)) {
+    return res.status(409).json({ success: false, error: 'Time conflict.' });
+  }
+
+  db.query(
+    "INSERT INTO schedules (user_id, date, place, course, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)",
+    [user_id, date, place, course, start_time, end_time],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      // ✅ Log the action – req.user.id is now available
+      logAction(req.user.id, 'CREATE_SCHEDULE', 'schedule', result.insertId, req);
+      res.json({ success: true });
+    }
+  );
+});
 // --- UPDATED PUT (Update Schedule) ---
-app.put('/api/schedules/:id', async (req, res) => {
+app.put('/api/schedules/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const { date, place, course, start_time, end_time } = req.body;
   const scheduleId = req.params.id;
   const { date: today } = getPHTime();
@@ -1145,13 +1320,17 @@ app.put('/api/schedules/:id', async (req, res) => {
   db.query("UPDATE schedules SET date=?, place=?, course=?, start_time=?, end_time=? WHERE id=?", 
     [date, place, course, start_time, end_time, scheduleId], (err) => {
       if (err) return res.status(500).json({ success: false, error: err.message });
+      logAction(req.user.id, 'UPDATE_SCHEDULE', 'schedule', scheduleId, req);
       res.json({ success: true });
     }
   );
 });
 
 // --- UPDATED DELETE (Delete Schedule) ---
-app.delete('/api/schedules/:id', async (req, res) => {
+app.delete('/api/schedules/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const scheduleId = req.params.id;
 
   // 1. Check if schedule has existing attendance
@@ -1166,6 +1345,7 @@ app.delete('/api/schedules/:id', async (req, res) => {
   db.query("DELETE FROM schedules WHERE id = ?", [scheduleId], (err, result) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
     if (result.affectedRows === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
+    logAction(req.user.id, 'DELETE_SCHEDULE', 'schedule', scheduleId, req);
     res.json({ success: true });
   });
 });
@@ -1204,8 +1384,10 @@ app.post('/api/schedule-requests', authenticateToken, (req, res) => {
     db.query(
       "INSERT INTO schedule_change_requests (user_id, full_name, request_type, date, place, course, start_time, end_time, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [employeeId, fullName, request_type, date, place, course, start_time, end_time, reason, 'pending'],
-      (err) => {
+      (err, result) => {   // ✅ added `result` parameter
         if (err) return res.status(500).json({ success: false, error: err.message });
+        // ✅ result.insertId is now available
+        logAction(req.user.id, 'SUBMIT_SCHEDULE_REQUEST', 'schedule_request', result.insertId, req);
         res.json({ success: true, message: 'Schedule request submitted!' });
       }
     );
@@ -1230,6 +1412,8 @@ app.put('/api/schedule-requests/:id/status', authenticateToken, (req, res) => {
     const newStatus = status.toLowerCase();
     db.query("UPDATE schedule_change_requests SET status = ?, admin_remarks = ? WHERE id = ?", [newStatus, admin_remarks || null, requestId], async (err) => {
       if (err) return res.status(500).json({ error: err.message });
+      const action = newStatus === 'approved' ? 'APPROVE_SCHEDULE_REQUEST' : 'REJECT_SCHEDULE_REQUEST';
+      logAction(req.user.id, action, 'schedule_request', requestId, req);
       if (newStatus === 'approved') {
         try {
           if (request.request_type === 'new') {
@@ -1264,6 +1448,7 @@ app.post('/api/employee-documents', authenticateToken, upload.single('file'), (r
     db.query("INSERT INTO employee_documents (user_id, employee_id, title, file_path, uploaded_by) VALUES (?, ?, ?, ?, ?)",
       [user_id, employeeId, title, filePath, req.user.id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
+        logAction(req.user.id, 'UPLOAD_DOCUMENT', 'employee_document', result.insertId, req);
         res.json({ success: true });
       });
   });
@@ -1337,16 +1522,13 @@ app.get('/api/employees', (req, res) => {
   });
 });
 
-// --- Create employee (now includes payroll_access and payroll_pin) ---
-// POST /api/employees - Create a new employee (admin/hr only)
 app.post('/api/employees', authenticateToken, (req, res) => {
-  // Only admins and HR can create employees
   if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
     return res.status(403).json({ success: false, message: 'Forbidden' });
   }
 
   const {
-    employee_id, full_name, email, password, role,
+    employee_id, full_name, first_name, last_name, email, password, role,
     employment_type, position_level, contract_type,
     monthly_salary, work_days_per_month,
     payroll_access, payroll_pin,
@@ -1356,7 +1538,6 @@ app.post('/api/employees', authenticateToken, (req, res) => {
     street_address, city, state_province, postal_code, country, additional_info, position
   } = req.body;
 
-  // Validate required fields
   if (!employee_id || !full_name || !email || !password || !role) {
     return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
@@ -1365,7 +1546,7 @@ app.post('/api/employees', authenticateToken, (req, res) => {
   const finalAccess = payroll_access || 0;
 
   const sql = `INSERT INTO users 
-    (employee_id, full_name, email, password, role, status,
+    (employee_id, full_name, first_name, last_name, email, password, role, status,
      employment_type, position_level, contract_type,
      monthly_salary, work_days_per_month,
      payroll_access, payroll_pin,
@@ -1373,10 +1554,10 @@ app.post('/api/employees', authenticateToken, (req, res) => {
      date_of_birth, phone_number, gender,
      emergency_contact_name, emergency_contact_phone,
      street_address, city, state_province, postal_code, country, additional_info, position)
-    VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
   db.query(sql, [
-    employee_id, full_name, email, password, role,
+    employee_id, full_name, first_name || null, last_name || null, email, password, role,
     employment_type, position_level, contract_type,
     monthly_salary, work_days_per_month,
     finalAccess, finalPin,
@@ -1386,66 +1567,68 @@ app.post('/api/employees', authenticateToken, (req, res) => {
     street_address || null, city || null, state_province || null,
     postal_code || null, country || 'Philippines', additional_info || null, position || null
   ], (err, result) => {
-    if (err) {
-      console.error('Employee creation error:', err);
-      return res.status(500).json({ success: false, error: err.message });
-    }
-
-    // ✅ Audit log
+    if (err) return res.status(500).json({ success: false, error: err.message });
     logAction(req.user.id, 'CREATE_EMPLOYEE', 'user', result.insertId, req);
-
     res.json({ success: true, message: 'Employee created successfully', employeeId: employee_id });
   });
 });
 
-// --- Update employee (supports payroll_access and payroll_pin) ---
 app.put('/api/employees/:id', authenticateToken, (req, res) => {
-  const {
-    full_name, role, employment_type, position_level,
-    contract_type, monthly_salary, work_days_per_month,
-    payroll_access, payroll_pin,
-    // new fields
-    middle_initial, date_of_joining, account_expiration_date,
-    date_of_birth, phone_number, gender,
-    emergency_contact_name, emergency_contact_phone,
-    street_address, city, state_province, postal_code, country, additional_info, position
-  } = req.body;
-
-  const fields = [
-    full_name, role, employment_type, position_level,
-    contract_type, monthly_salary, work_days_per_month
-  ];
-  let sql = `UPDATE users SET
-    full_name=?, role=?, employment_type=?, position_level=?,
-    contract_type=?, monthly_salary=?, work_days_per_month=?`;
-
-  if (payroll_access !== undefined) {
-    sql += `, payroll_access=?`;
-    fields.push(payroll_access ? 1 : 0);
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
   }
-  if (payroll_pin !== undefined) {
-    sql += `, payroll_pin=?`;
-    fields.push(payroll_pin);
+
+  const employeeId = req.params.id;
+  const updates = req.body;
+
+  const fieldMapping = {
+    full_name: 'full_name',
+    first_name: 'first_name',
+    last_name: 'last_name',
+    email: 'email',
+    phone: 'phone_number',
+    position_level: 'position_level',
+    contract_type: 'contract_type',
+    status: 'status',
+    role: 'role',
+    date_of_joining: 'date_of_joining',
+    monthly_salary: 'monthly_salary',
+    work_days_per_month: 'work_days_per_month',
+    payroll_access: 'payroll_access',
+    payroll_pin: 'payroll_pin',
+    date_of_birth: 'date_of_birth',
+    gender: 'gender',
+    emergency_contact_name: 'emergency_contact_name',
+    emergency_contact_phone: 'emergency_contact_phone',
+    street: 'street_address',
+    city: 'city',
+    state: 'state_province',
+    postal_code: 'postal_code',
+    country: 'country',
+    additional_info: 'additional_info',
+    middle_initial: 'middle_initial',
+    account_expiry: 'account_expiration_date',
+    position: 'position',
+  };
+
+  const setClauses = [];
+  const values = [];
+  for (const [frontField, dbField] of Object.entries(fieldMapping)) {
+    if (updates[frontField] !== undefined) {
+      setClauses.push(`${dbField} = ?`);
+      values.push(updates[frontField]);
+    }
   }
-  // new fields (allow null)
-  sql += `, middle_initial=?, date_of_joining=?, account_expiration_date=?,
-          date_of_birth=?, phone_number=?, gender=?,
-          emergency_contact_name=?, emergency_contact_phone=?,
-          street_address=?, city=?, state_province=?, postal_code=?, country=?, additional_info=?, position=?`;
-  fields.push(
-    middle_initial || null, date_of_joining || null, account_expiration_date || null,
-    date_of_birth || null, phone_number || null, gender || null,
-    emergency_contact_name || null, emergency_contact_phone || null,
-    street_address || null, city || null, state_province || null,
-    postal_code || null, country || 'Philippines', additional_info || null, position || null
-  );
 
-  sql += ` WHERE id=?`;
-  fields.push(req.params.id);
+  if (setClauses.length === 0) return res.status(400).json({ success: false, message: 'No fields to update' });
 
-  db.query(sql, fields, (err) => {
+  values.push(employeeId);
+  const sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
+
+  db.query(sql, values, (err, result) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
-    logAction(req.user.id, 'UPDATE_EMPLOYEE', 'user', req.params.id, req);
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Employee not found.' });
+    logAction(req.user.id, 'UPDATE_EMPLOYEE', 'user', employeeId, req);
     res.json({ success: true });
   });
 });
@@ -1465,20 +1648,16 @@ app.get('/api/employees/last-id', authenticateToken, (req, res) => {
 
 // Delete employee (admin only, protected)
 app.delete('/api/employees/:id', authenticateToken, (req, res) => {
-  // Only admins and HR can delete
   if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
     return res.status(403).json({ success: false, message: 'Forbidden' });
   }
 
   const userId = req.params.id;
-  db.query("DELETE FROM users WHERE id = ? AND LOWER(role) = 'instructor'", [userId], (err, result) => {
-    if (err) {
-      console.error("Delete error:", err);
-      return res.status(500).json({ success: false, message: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Employee not found or cannot be deleted." });
-    }
+  // Removed "AND LOWER(role) = 'instructor'" to allow deleting any role
+  db.query("DELETE FROM users WHERE id = ?", [userId], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: "Employee not found." });
+    
     logAction(req.user.id, 'DELETE_EMPLOYEE', 'user', userId, req);
     res.json({ success: true });
   });
@@ -1491,6 +1670,7 @@ app.put('/api/employees/:employeeId/toggle-status', (req, res) => {
         const newStatus = results[0].status === 'active' ? 'deactivated' : 'active';
         db.query("UPDATE users SET status = ? WHERE employee_id = ?", [newStatus, employeeId], (err) => {
             if (err) return res.status(500).json({ success: false });
+            logAction(req.user.id, 'TOGGLE_EMPLOYEE_STATUS', 'user', employeeId, req);
             res.json({ success: true, newStatus });
         });
     });
@@ -1566,21 +1746,36 @@ app.get('/api/ble-tags', (req, res) => {
   });
 });
 
-app.post('/api/ble-tags', (req, res) => {
+app.post('/api/ble-tags', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'security') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { ble_id, label, mac_address } = req.body;
   if (!ble_id) return res.status(400).json({ error: "BLE ID is required." });
   if (!mac_address) return res.status(400).json({ error: "MAC address is required." });
-  db.query("INSERT INTO ble_tags (ble_id, label, mac_address) VALUES (?, ?, ?)", [ble_id, label || '', mac_address], (err, result) => {
-    if (err) { if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Tag already exists." }); return res.status(500).json({ error: err.message }); }
-    res.json({ success: true, id: result.insertId });
-  });
+  db.query(
+    "INSERT INTO ble_tags (ble_id, label, mac_address) VALUES (?, ?, ?)",
+    [ble_id, label || '', mac_address],
+    (err, result) => {
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Tag already exists." });
+        return res.status(500).json({ error: err.message });
+      }
+      logAction(req.user.id, 'CREATE_BLE_TAG', 'ble_tag', result.insertId, req);
+      res.json({ success: true, id: result.insertId });
+    }
+  );
 });
 
-app.delete('/api/ble-tags/:id', (req, res) => {
+app.delete('/api/ble-tags/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'security') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   db.query("DELETE FROM ble_tags WHERE id = ?", [id], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     if (result.affectedRows === 0) return res.status(404).json({ error: "Tag not found." });
+    logAction(req.user.id, 'DELETE_BLE_TAG', 'ble_tag', id, req);
     res.json({ success: true });
   });
 });
@@ -1624,6 +1819,7 @@ app.put('/api/visitor-requests/:id/return', authenticateToken, (req, res) => {
         if (result.affectedRows === 0) {
           return res.status(400).json({ error: "Visitor not checked in or already returned" });
         }
+        logAction(req.user.id, 'VISITOR_RETURN', 'visitor_request', id, req);
         res.json({ success: true });
       }
     );
@@ -1786,6 +1982,7 @@ app.put('/api/appointments/:id', authenticateToken, (req, res) => {
   db.query(sql, [visit_date, visit_time, id], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Appointment not found' });
+    logAction(req.user.id, 'UPDATE_APPOINTMENT', 'visitor_request', id, req);
     res.json({ success: true });
   });
 });
@@ -1949,29 +2146,47 @@ app.get('/api/visit-reasons', (req, res) => {
   });
 });
 
-app.post('/api/visit-reasons', (req, res) => {
+// CREATE a new visit reason (admin only)
+app.post('/api/visit-reasons', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+  }
   const { reason_text } = req.body;
   if (!reason_text) return res.status(400).json({ error: "Reason text is required." });
   
   db.query("INSERT INTO visit_reasons (reason_text) VALUES (?)", [reason_text.trim()], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
+    logAction(req.user.id, 'CREATE_VISIT_REASON', 'visit_reason', result.insertId, req);
     res.status(201).json({ success: true, id: result.insertId });
   });
 });
 
-app.put('/api/visit-reasons/:id', (req, res) => {
+// UPDATE a visit reason (admin only)
+app.put('/api/visit-reasons/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+  }
   const { id } = req.params;
   const { reason_text } = req.body;
-  db.query("UPDATE visit_reasons SET reason_text = ? WHERE id = ?", [reason_text.trim(), id], (err) => {
+  if (!reason_text) return res.status(400).json({ error: "Reason text required." });
+  db.query("UPDATE visit_reasons SET reason_text = ? WHERE id = ?", [reason_text.trim(), id], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Reason not found' });
+    logAction(req.user.id, 'UPDATE_VISIT_REASON', 'visit_reason', id, req);
     res.json({ success: true });
   });
 });
 
-app.delete('/api/visit-reasons/:id', (req, res) => {
+// DELETE a visit reason (admin only)
+app.delete('/api/visit-reasons/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+  }
   const { id } = req.params;
-  db.query("DELETE FROM visit_reasons WHERE id = ?", [id], (err) => {
+  db.query("DELETE FROM visit_reasons WHERE id = ?", [id], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Reason not found' });
+    logAction(req.user.id, 'DELETE_VISIT_REASON', 'visit_reason', id, req);
     res.json({ success: true });
   });
 });
@@ -1993,6 +2208,7 @@ app.post('/api/emergency-alerts', authenticateToken, (req, res) => {
         db.query('INSERT INTO alert_receipts (alert_id, user_id) VALUES ?', [receipts]);
       }
     });
+    logAction(req.user.id, 'CREATE_ALERT', 'emergency_alert', alertId, req);
     res.json({ success: true, alertId });
   });
 });
@@ -2030,10 +2246,18 @@ app.get('/api/emergency-alerts', authenticateToken, (req, res) => {
 
 // 1. Public: list open jobs
 app.get('/api/public/jobs', (req, res) => {
-  db.query("SELECT id, title, department, description, employment_type, created_at FROM job_postings WHERE status = 'open' ORDER BY created_at DESC", (err, jobs) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(jobs);
-  });
+  // FIXED: Now selecting ALL required fields for the complete details modal
+  db.query(
+    `SELECT id, title, department, description, requirements, employment_type, 
+            location_type, location, salary_min, salary_max, created_at 
+     FROM job_postings 
+     WHERE status = 'open' 
+     ORDER BY created_at DESC`, 
+    (err, jobs) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(jobs);
+    }
+  );
 });
 
 // 2. Public: submit application
@@ -2088,6 +2312,7 @@ app.post('/api/jobs', authenticateToken, (req, res) => {
     ],
     (err, result) => {
       if (err) return res.status(500).json({ error: err.message });
+      logAction(req.user.id, 'CREATE_JOB', 'job_posting', result.insertId, req);
       res.json({ success: true, id: result.insertId });
     }
   );
@@ -2118,6 +2343,7 @@ app.put('/api/jobs/:id', authenticateToken, (req, res) => {
     (err, result) => {
       if (err) return res.status(500).json({ error: err.message });
       if (result.affectedRows === 0) return res.status(404).json({ error: 'Job not found' });
+      logAction(req.user.id, 'UPDATE_JOB', 'job_posting', req.params.id, req);
       res.json({ success: true });
     }
   );
@@ -2135,6 +2361,7 @@ app.delete('/api/jobs/:id', authenticateToken, (req, res) => {
     db.query("DELETE FROM job_postings WHERE id = ?", [jobId], (err, result) => {
       if (err) return res.status(500).json({ error: err.message });
       if (result.affectedRows === 0) return res.status(404).json({ error: 'Job not found' });
+      logAction(req.user.id, 'DELETE_JOB', 'job_posting', jobId, req);
       res.json({ success: true });
     });
   });
@@ -2193,6 +2420,7 @@ app.put('/api/applicants/:id', authenticateToken, (req, res) => {
     [status, req.params.id],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
+      logAction(req.user.id, 'UPDATE_APPLICANT_STATUS', 'job_applicant', req.params.id, req);
       res.json({ success: true });
     }
   );
@@ -2213,6 +2441,7 @@ app.post('/api/policies', authenticateToken, upload.single('file'), (req, res) =
   const filePath = `/uploads/${req.file.filename}`;
   db.query("INSERT INTO hr_policies (title, file_path, uploaded_by) VALUES (?, ?, ?)", [title, filePath, req.user.id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+    logAction(req.user.id, 'CREATE_POLICY', 'hr_policy', result.insertId, req);
     res.json({ success: true });
   });
 });
@@ -2435,6 +2664,7 @@ app.post('/api/school-locations', authenticateToken, (req, res) => {
         }
         return res.status(500).json({ error: err.message });
       }
+      logAction(req.user.id, 'CREATE_LOCATION', 'school_location', result.insertId, req);
       res.json({ success: true, id: result.insertId });
     }
   );
@@ -2465,8 +2695,10 @@ app.put('/api/school-locations/:id', authenticateToken, (req, res) => {
         return res.status(500).json({ error: err.message });
       }
       if (result.affectedRows === 0) {
+        
         return res.status(404).json({ error: 'Location not found' });
       }
+      logAction(req.user.id, 'UPDATE_LOCATION', 'school_location', locationId, req);
       res.json({ success: true });
     }
   );
@@ -2489,6 +2721,7 @@ app.delete('/api/school-locations/:id', authenticateToken, (req, res) => {
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Location not found' });
       }
+      logAction(req.user.id, 'DELETE_LOCATION', 'school_location', locationId, req);
       res.json({ success: true });
     });
   });
@@ -2746,7 +2979,10 @@ app.put('/api/users/update-pin', (req, res) => {
 });
 
 // Finalize payroll for a single employee
-app.post('/api/payroll/finalize', (req, res) => {
+app.post('/api/payroll/finalize', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const {
     user_id, month_year, salary_rate, total_hours, overtime_hours, overtime_pay,
     transport_allowance, meal_allowance, housing_allowance, sss_deduction, philhealth_deduction,
@@ -2777,8 +3013,10 @@ app.post('/api/payroll/finalize', (req, res) => {
         loan_deduction || 0, other_deduction || 0, gross_pay, tax_deduction || 0, net_pay,
         total_earnings || net_pay, status || 'paid'
       ],
-      (err) => {
+      (err, result) => {   // ✅ added result parameter
         if (err) return res.status(500).json({ success: false, error: err.message });
+        // ✅ Audit log
+        logAction(req.user.id, 'FINALIZE_PAYROLL', 'payroll', result.insertId, req);
         res.json({ success: true });
       }
     );
@@ -2786,7 +3024,10 @@ app.post('/api/payroll/finalize', (req, res) => {
 });
 
 // Run monthly payroll for all instructors
-app.post('/api/payroll/run-monthly', async (req, res) => {
+app.post('/api/payroll/run-monthly', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { month, year } = req.body;
   if (!month || !year) return res.status(400).json({ error: 'Month and year required' });
 
@@ -2808,17 +3049,36 @@ app.post('/api/payroll/run-monthly', async (req, res) => {
         continue;
       }
 
+      // Get total hours from attendance
       const [attendance] = await db.promise().query(
         `SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, time_in, time_out) / 60), 0) as total_hours 
          FROM attendance 
          WHERE user_id = ? AND date BETWEEN ? AND ? AND status IN ('present', 'late')`,
         [emp.employee_id, startDate, endDate]
       );
-      const totalHours = attendance[0].total_hours;
-      const hourlyRate = (emp.monthly_salary / emp.work_days_per_month) / 8;
+      let totalHours = attendance[0]?.total_hours || 0;
+      if (isNaN(totalHours)) totalHours = 0;
+
+      // Validate salary data
+      let monthlySalary = parseFloat(emp.monthly_salary);
+      let workDays = parseFloat(emp.work_days_per_month);
+      if (isNaN(monthlySalary) || monthlySalary <= 0) monthlySalary = 0;
+      if (isNaN(workDays) || workDays <= 0) workDays = 1; // prevent division by zero
+
+      let hourlyRate = 0;
+      if (monthlySalary > 0 && workDays > 0) {
+        hourlyRate = (monthlySalary / workDays) / 8;
+      }
+
       const grossPay = totalHours * hourlyRate;
       const tax = grossPay * 0.10;
       const netPay = grossPay - tax;
+
+      // Ensure no NaN values
+      const safeGross = isNaN(grossPay) ? 0 : grossPay;
+      const safeTax = isNaN(tax) ? 0 : tax;
+      const safeNet = isNaN(netPay) ? 0 : netPay;
+      const safeHourlyRate = isNaN(hourlyRate) ? 0 : hourlyRate;
 
       await db.promise().query(
         `INSERT INTO payroll 
@@ -2827,10 +3087,11 @@ app.post('/api/payroll/run-monthly', async (req, res) => {
            pagibig_deduction, loan_deduction, other_deduction, gross_pay, tax_deduction, net_pay,
            status, total_earnings)
          VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?, ?, 'paid', ?)`,
-        [emp.id, monthYear, hourlyRate, totalHours, grossPay, tax, netPay, netPay]
+        [emp.id, monthYear, safeHourlyRate, totalHours, safeGross, safeTax, safeNet, safeNet]
       );
-      processed.push({ employee: emp.full_name, totalHours, grossPay, netPay });
+      processed.push({ employee: emp.full_name, totalHours, grossPay: safeGross, netPay: safeNet });
     }
+    logAction(req.user.id, 'RUN_MONTHLY_PAYROLL', 'payroll', null, req);
     res.json({ success: true, processed: processed.length, skipped: skipped.length, details: { processed, skipped } });
   } catch (err) {
     console.error('Monthly payroll error:', err);
@@ -2839,14 +3100,22 @@ app.post('/api/payroll/run-monthly', async (req, res) => {
 });
 
 // Update monthly salary and work days per month
-app.put('/api/payroll/update-employee-salary/:employeeId', (req, res) => {
+app.put('/api/payroll/update-employee-salary/:employeeId', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { employeeId } = req.params;
   const { monthly_salary, work_days_per_month } = req.body;
-  db.query("UPDATE users SET monthly_salary = ?, work_days_per_month = ? WHERE employee_id = ?", [monthly_salary, work_days_per_month, employeeId], (err, result) => {
-    if (err) return res.status(500).json({ success: false, error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Employee not found' });
-    res.json({ success: true });
-  });
+  db.query(
+    "UPDATE users SET monthly_salary = ?, work_days_per_month = ? WHERE employee_id = ?",
+    [monthly_salary, work_days_per_month, employeeId],
+    (err, result) => {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Employee not found' });
+      logAction(req.user.id, 'UPDATE_SALARY', 'user', employeeId, req);
+      res.json({ success: true });
+    }
+  );
 });
 
 // Payroll access logs
@@ -2969,6 +3238,7 @@ app.post('/api/courses', authenticateToken, (req, res) => {
       }
       return res.status(500).json({ error: err.message });
     }
+    logAction(req.user.id, 'CREATE_COURSE', 'course', result.insertId, req);
     res.json({ success: true, id: result.insertId });
   });
 });
@@ -2985,14 +3255,11 @@ app.put('/api/courses/:id', authenticateToken, (req, res) => {
   }
   db.query("UPDATE courses SET name = ? WHERE id = ?", [name.trim(), courseId], (err, result) => {
     if (err) {
-      if (err.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ error: 'Course name already exists' });
-      }
+      if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Course name already exists' });
       return res.status(500).json({ error: err.message });
     }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Course not found' });
-    }
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Course not found' });
+    logAction(req.user.id, 'UPDATE_COURSE', 'course', courseId, req);
     res.json({ success: true });
   });
 });
@@ -3014,6 +3281,7 @@ app.delete('/api/courses/:id', authenticateToken, (req, res) => {
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Course not found' });
       }
+      logAction(req.user.id, 'DELETE_COURSE', 'course', courseId, req);
       res.json({ success: true });
     });
   });
@@ -3050,6 +3318,8 @@ app.put('/api/visitor-requests/:id/arrive', authenticateToken, (req, res) => {
   `;
   db.query(sql, [destination, ble_id, id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+
+    logAction(req.user.id, 'VISITOR_ARRIVE', 'visitor_request', id, req);
 
     // 🔥 FORCE overwrite the permanent destination lock
     visitorDestinations[ble_id] = destination;
