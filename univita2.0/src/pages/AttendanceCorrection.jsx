@@ -1,9 +1,8 @@
-// src/pages/AttendanceCorrection.jsx
 import React, { useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import FormalModal from '../components/FormalModal';
-import { Search, Edit3 } from 'lucide-react';
+import { Search, Edit3, ClipboardList, CheckCircle, XCircle } from 'lucide-react';
 import { API_BASE } from '../api';
 import './AttendanceCorrection.css';
 
@@ -18,6 +17,12 @@ const AttendanceCorrection = () => {
   const [form, setForm] = useState({ time_in: '', time_out: '', status: '', location: '' });
   const [searchDone, setSearchDone] = useState(false);
 
+  // State for pending corrections modal
+  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [pendingCorrections, setPendingCorrections] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+
+  // Fetch attendance records for a specific employee
   const fetchRecords = async () => {
     if (!employeeId.trim()) return;
     try {
@@ -30,6 +35,7 @@ const AttendanceCorrection = () => {
     }
   };
 
+  // Open edit modal for an attendance record
   const openEditor = (record) => {
     setEditing(record);
     setForm({
@@ -40,6 +46,7 @@ const AttendanceCorrection = () => {
     });
   };
 
+  // Save edited attendance record
   const handleSave = async () => {
     try {
       await axios.put(`${API_BASE}/attendance/${editing.id}`, form, getAuthHeaders());
@@ -49,6 +56,33 @@ const AttendanceCorrection = () => {
     } catch (err) {
       console.error(err);
       toast.error('Failed to update record. Please try again.');
+    }
+  };
+
+  // Fetch all pending correction requests
+  const fetchPendingCorrections = async () => {
+    setLoadingPending(true);
+    try {
+      const res = await axios.get(`${API_BASE}/attendance/corrections/pending`, getAuthHeaders());
+      setPendingCorrections(res.data);
+      setShowPendingModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load pending corrections');
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  // Approve or reject a correction request
+  const handleCorrectionAction = async (id, status) => {
+    try {
+      await axios.put(`${API_BASE}/attendance/corrections/${id}/review`, { status }, getAuthHeaders());
+      toast.success(`Correction request ${status}`);
+      fetchPendingCorrections(); // refresh the list
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to ${status} correction`);
     }
   };
 
@@ -68,6 +102,9 @@ const AttendanceCorrection = () => {
         </div>
         <button className="ac-search-btn" onClick={fetchRecords}>
           <Search size={16} /> Search
+        </button>
+        <button className="ac-pending-btn" onClick={fetchPendingCorrections}>
+          <ClipboardList size={16} /> Pending Corrections
         </button>
       </div>
 
@@ -112,6 +149,7 @@ const AttendanceCorrection = () => {
         </div>
       )}
 
+      {/* Edit Attendance Modal */}
       <FormalModal
         show={!!editing}
         onClose={() => setEditing(null)}
@@ -144,6 +182,63 @@ const AttendanceCorrection = () => {
           <label className="ac-modal-label">Location</label>
           <input type="text" className="ac-input" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
         </div>
+      </FormalModal>
+
+      {/* Pending Corrections Modal */}
+      <FormalModal
+        show={showPendingModal}
+        onClose={() => setShowPendingModal(false)}
+        title="Pending Correction Requests"
+        size="large"
+        footer={<button className="btn-modal-cancel" onClick={() => setShowPendingModal(false)}>Close</button>}
+      >
+        {loadingPending ? (
+          <div className="text-center p-4">Loading...</div>
+        ) : pendingCorrections.length === 0 ? (
+          <div className="text-center p-4 text-gray-500">No pending correction requests.</div>
+        ) : (
+          <div className="pending-table-wrapper">
+            <table className="pending-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Requested Time</th>
+                  <th>Reason</th>
+                  <th>Selfie</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingCorrections.map(c => (
+                  <tr key={c.id}>
+                    <td>{c.full_name} ({c.employee_id})</td>
+                    <td>{c.attendance_date}</td>
+                    <td>{c.requested_clock_in ? 'Clock In' : 'Clock Out'}</td>
+                    <td>{c.requested_clock_in || c.requested_clock_out}</td>
+                    <td>{c.reason}</td>
+                    <td>
+                      {c.selfie_url ? (
+                        <a href={`${API_BASE.replace('/api', '')}${c.selfie_url}`} target="_blank" rel="noopener noreferrer">
+                          View
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td className="action-buttons">
+                      <button className="approve-correction" onClick={() => handleCorrectionAction(c.id, 'approved')}>
+                        <CheckCircle size={16} /> Approve
+                      </button>
+                      <button className="reject-correction" onClick={() => handleCorrectionAction(c.id, 'rejected')}>
+                        <XCircle size={16} /> Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </FormalModal>
     </div>
   );

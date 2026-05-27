@@ -320,3 +320,73 @@ export const fetchActiveAlertsForUser = async (userId) => {
         return [];
     }
 };
+
+// ==========================================
+// OVERTIME REQUESTS (Web Admin)
+// ==========================================
+
+// Fetch all pending overtime requests
+export const fetchPendingOvertimeRequests = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/overtime-requests/pending`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+    });
+    return await handleWebResponse(res);
+  } catch (error) {
+    console.error("Fetch Pending Overtime Error:", error);
+    return [];
+  }
+};
+
+// Approve or reject an overtime request
+export const updateOvertimeStatus = async (id, status) => {
+  try {
+    const res = await fetch(`${API_BASE}/overtime-requests/${id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('auth_token')}`
+      },
+      body: JSON.stringify({ status })
+    });
+    return await res.json();
+  } catch (error) {
+    console.error("Update Overtime Status Error:", error);
+    return { success: false };
+  }
+};
+
+// ==========================================
+// ATTENDANCE CORRECTIONS (Web Admin)
+// ==========================================
+
+// Fetch all pending correction requests (from attendance_corrections table)
+export const fetchPendingCorrections = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/attendance/corrections/pending`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+    });
+    return await handleWebResponse(res);
+  } catch (error) {
+    console.error("Fetch Pending Corrections Error:", error);
+    return [];
+  }
+};
+
+// Review a correction request (approve or reject)
+export const reviewCorrection = async (id, status) => {
+  try {
+    const res = await fetch(`${API_BASE}/attendance/corrections/${id}/review`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('auth_token')}`
+      },
+      body: JSON.stringify({ status })
+    });
+    return await res.json();
+  } catch (error) {
+    console.error("Review Correction Error:", error);
+    return { success: false };
+  }
+};
