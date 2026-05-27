@@ -47,6 +47,7 @@ import TodayVisitors from './pages/TodayVisitors';
 import LocationTracking from './pages/LocationTracking';
 import ManageReasons from './pages/ManageReasons';
 import ManageBLETags from './pages/ManageBLETags';
+import CompletedVisits from './pages/CompletedVisits';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -166,6 +167,7 @@ function App() {
       case 'location-tracking': return { title: 'Location Tracking' };
       case 'manage-reasons': return { title: 'Manage Visit Reasons' };
       case 'manage-ble-tags': return { title: 'Manage BLE Tags' };
+      case 'completed-visits': return { title: 'Completed Visits' };
       default: return { title: 'Dashboard' };
     }
   };
@@ -208,6 +210,8 @@ function App() {
         return <JobPostings />;
       case 'manage-ble': 
         return <ManageBLETags />;
+      case 'completed-visits':
+        return <CompletedVisits />;
       case 'performance':
         return <PerformanceEvaluation />;
       case 'location-tracking':

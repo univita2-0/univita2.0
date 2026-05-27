@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { User, Info, RefreshCw } from 'lucide-react';
+import { User, Info, RefreshCw, Calendar } from 'lucide-react';
 import { API_BASE } from '../api';
 import FormalModal from '../components/FormalModal';
 import './TodayVisitors.css';
@@ -11,7 +11,7 @@ const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
 });
 
-// ----- Floor‑specific room lists (based on your description) -----
+// ----- Floor‑specific room lists (unchanged) -----
 const FLOOR_3_ROOMS = [
   'AHA Room', 'Private Room', 'Operating Room', 'Delivery Room', 'MICU', 'ICU',
   'Classroom', 'Library', 'Breakout Room 1', 'Breakout Room 2', 'Breakout Room 3',
@@ -23,17 +23,26 @@ const FLOOR_5_ROOMS = [
   'AHA Room', 'Classroom 1', 'Classroom 2', 'HR / Admin', 'Pantry'
 ];
 
-// All rooms for the dropdown (unique)
 const ALL_ROOMS = [...new Set([...FLOOR_3_ROOMS, ...FLOOR_5_ROOMS])];
 
-// Helper to determine floor from room name
 const getFloorByRoom = (roomName) => {
   if (FLOOR_3_ROOMS.includes(roomName)) return '3';
   if (FLOOR_5_ROOMS.includes(roomName)) return '5';
-  return '3'; // default fallback
+  return '3';
+};
+
+const formatTo12Hour = (timeStr) => {
+  if (!timeStr) return '—';
+  const [hour, minute] = timeStr.split(':');
+  let h = parseInt(hour, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${minute} ${ampm}`;
 };
 
 const TodayVisitors = () => {
+  // --- Date filter state ---
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [visitors, setVisitors] = useState([]);
   const [allBleTags, setAllBleTags] = useState([]);
   const [availableBleTags, setAvailableBleTags] = useState([]);
@@ -45,32 +54,32 @@ const TodayVisitors = () => {
   const [tagsLoading, setTagsLoading] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnTargetId, setReturnTargetId] = useState(null);
-  const today = new Date().toLocaleDateString('en-CA');
 
-  const fetchTodayVisitors = useCallback(async () => {
-  setLoading(true);
-  try {
-    const res = await axios.get(`${API_BASE}/visitor-requests`, {
-      params: { date: today, status: 'APPROVED' },
-      ...getAuthHeaders()
-    });
-    const data = res.data || [];
-    setVisitors(data);
-    setStats({
-      total: data.length,
-      
-      arrived: data.filter(v => v.arrived == 1 && v.returned != 1).length,
-      noShow: data.filter(v => v.no_show == 1).length,
-      returned: data.filter(v => v.returned == 1).length,
-    });
-  } catch (err) {
-    console.error('Failed to fetch visitors', err);
-    toast.error('Could not load visitor list');
-  } finally {
-    setLoading(false);
-  }
-}, [today]);
+  // Fetch visitors for the selected date
+  const fetchVisitorsForDate = useCallback(async (date) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/visitor-requests`, {
+        params: { date, status: 'APPROVED' },
+        ...getAuthHeaders()
+      });
+      const data = res.data || [];
+      setVisitors(data);
+      setStats({
+        total: data.length,
+        arrived: data.filter(v => v.arrived == 1 && v.returned != 1).length,
+        noShow: data.filter(v => v.no_show == 1).length,
+        returned: data.filter(v => v.returned == 1).length,
+      });
+    } catch (err) {
+      console.error('Failed to fetch visitors', err);
+      toast.error('Could not load visitor list');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
+  // Fetch BLE tags (independent of date)
   const fetchBleTags = useCallback(async () => {
     setTagsLoading(true);
     try {
@@ -92,33 +101,36 @@ const TodayVisitors = () => {
     }
   }, []);
 
+  // Reload when selected date changes
   useEffect(() => {
-    fetchTodayVisitors();
+    fetchVisitorsForDate(selectedDate);
+  }, [selectedDate, fetchVisitorsForDate]);
+
+  // Initial load of BLE tags
+  useEffect(() => {
     fetchBleTags();
-  }, [fetchTodayVisitors, fetchBleTags]);
+  }, [fetchBleTags]);
 
+  // Handlers (unchanged)
   const markArrived = async (id, room, bleId) => {
-  if (!room || !bleId) {
-    toast.warning('Please select both a destination room and a BLE tag.');
-    return;
-  }
-  const floor = getFloorByRoom(room);
-  try {
-    // 1. Update database
-    await axios.put(`${API_BASE}/visitor-requests/${id}/arrive`, {
-      destination: room,
-      ble_id: bleId
-    }, getAuthHeaders());
-
-    // 3. Refresh lists
-    await fetchTodayVisitors();
-    await fetchBleTags();
-    toast.success('Visitor checked in and BLE tag assigned.');
-  } catch (err) {
-    console.error(err);
-    toast.error('Error marking arrival.');
-  }
-};
+    if (!room || !bleId) {
+      toast.warning('Please select both a destination room and a BLE tag.');
+      return;
+    }
+    const floor = getFloorByRoom(room);
+    try {
+      await axios.put(`${API_BASE}/visitor-requests/${id}/arrive`, {
+        destination: room,
+        ble_id: bleId
+      }, getAuthHeaders());
+      await fetchVisitorsForDate(selectedDate);
+      await fetchBleTags();
+      toast.success('Visitor checked in and BLE tag assigned.');
+    } catch (err) {
+      console.error(err);
+      toast.error('Error marking arrival.');
+    }
+  };
 
   const confirmNoShow = (id) => {
     setNoShowTargetId(id);
@@ -129,7 +141,7 @@ const TodayVisitors = () => {
     if (!noShowTargetId) return;
     try {
       await axios.put(`${API_BASE}/visitor-requests/${noShowTargetId}/no-show`, {}, getAuthHeaders());
-      await fetchTodayVisitors();
+      await fetchVisitorsForDate(selectedDate);
       await fetchBleTags();
       toast.info('Visitor marked as no show.');
     } catch (err) {
@@ -150,7 +162,7 @@ const TodayVisitors = () => {
     if (!returnTargetId) return;
     try {
       await axios.put(`${API_BASE}/visitor-requests/${returnTargetId}/return`, {}, getAuthHeaders());
-      await fetchTodayVisitors();
+      await fetchVisitorsForDate(selectedDate);
       await fetchBleTags();
       toast.success('BLE tag returned and now available.');
     } catch (err) {
@@ -162,16 +174,34 @@ const TodayVisitors = () => {
     }
   };
 
-  if (loading) return <div className="loading-state">Loading visitors...</div>;
+  // Format the displayed date
+  const formattedDate = new Date(selectedDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  if (loading && visitors.length === 0) return <div className="loading-state">Loading visitors...</div>;
 
   return (
     <div className="today-visitors-container">
       <div className="tv-header">
-        <h2>Today's Approved Visitors</h2>
-        <p className="tv-date">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        <button className="btn-view-tags" onClick={() => { fetchBleTags(); setShowTagsModal(true); }}>
-          <Info size={16} /> View BLE Tags
-        </button>
+        <div>
+          <h2>Approved Visitors</h2>
+          <p className="tv-date">{formattedDate}</p>
+        </div>
+        <div className="tv-header-actions">
+          <div className="date-filter">
+            <Calendar size={16} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="date-picker"
+            />
+          </div>
+          <button className="btn-view-tags" onClick={() => { fetchBleTags(); setShowTagsModal(true); }}>
+            <Info size={16} /> View BLE Tags
+          </button>
+        </div>
       </div>
 
       <div className="tv-stats">
@@ -182,7 +212,7 @@ const TodayVisitors = () => {
       </div>
 
       {visitors.length === 0 ? (
-        <div className="empty-state"><User size={48} /><p>No approved visitors for today.</p></div>
+        <div className="empty-state"><User size={48} /><p>No approved visitors for this date.</p></div>
       ) : (
         <div className="visitors-table-wrapper">
           <table className="visitors-table">
@@ -203,7 +233,7 @@ const TodayVisitors = () => {
                     <strong>{v.first_name} {v.last_name}</strong>
                     <br /><span className="small-text">{v.email}</span>
                   </td>
-                  <td>{v.visit_time ? v.visit_time.slice(0,5) : '—'}</td>
+                  <td>{v.visit_time ? formatTo12Hour(v.visit_time) : '—'}</td>
                   <td>{v.reason || '—'}</td>
                   <td>
                     {!v.arrived && !v.no_show ? (
@@ -276,7 +306,7 @@ const TodayVisitors = () => {
         </div>
       )}
 
-      {/* BLE Tags Modal */}
+      {/* Modals remain unchanged */}
       <FormalModal
         show={showTagsModal}
         onClose={() => setShowTagsModal(false)}
@@ -320,7 +350,6 @@ const TodayVisitors = () => {
         </div>
       </FormalModal>
 
-      {/* No Show Confirmation Modal */}
       <FormalModal
         show={showNoShowModal}
         onClose={() => setShowNoShowModal(false)}
@@ -337,7 +366,6 @@ const TodayVisitors = () => {
         <p>Are you sure you want to mark this visitor as <strong>No Show</strong>? This action cannot be undone.</p>
       </FormalModal>
 
-      {/* Return BLE Tag Confirmation Modal */}
       <FormalModal
         show={showReturnModal}
         onClose={() => setShowReturnModal(false)}

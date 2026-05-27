@@ -12,7 +12,8 @@
 /* ----- Header ----- */
 .tv-header {
   display: flex;
-  align-items: baseline;
+  justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 2rem;
@@ -29,11 +30,7 @@
 .tv-date {
   color: #6b7280;
   font-size: 0.875rem;
-  background: white;
-  padding: 0.25rem 1rem;
-  border-radius: 2rem;
-  border: 1px solid #e5e7eb;
-  margin-left: auto;
+  margin-top: 0.25rem;
 }
 
 /* ----- Stats Cards ----- */
@@ -349,4 +346,46 @@
   text-align: center;
   padding: 2rem;
   color: #9ca3af;
+}
+.tv-header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.date-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.25rem 0.75rem;
+}
+
+.date-picker {
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.btn-view-tags {
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3b82f6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-view-tags:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
 }

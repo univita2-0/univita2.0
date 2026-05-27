@@ -1,21 +1,21 @@
-// src/screens/RequestsScreen.js – Leave, Schedule, Appeal, Correction
+// src/screens/RequestsScreen.js
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Image, Modal as RNModal, Platform
+  TextInput, Alert, ActivityIndicator, Image, Modal as RNModal, Platform, StatusBar
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { submitLeaveRequest, requestAttendanceCorrection, API_URL, submitScheduleRequest  } from './api';
-import { Upload, X, Calendar as CalendarIcon, Camera } from 'lucide-react-native';
+import { submitLeaveRequest, requestAttendanceCorrection, API_URL, submitScheduleRequest } from './api';
+import { Upload, X, Calendar as CalendarIcon, Camera, Clock, FileText, AlertCircle } from 'lucide-react-native';
 
 const RequestsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('leave');
 
-  // ---------- Leave Request ----------
+  // ---------- Leave ----------
   const [leaveDate, setLeaveDate] = useState('');
   const [leaveType, setLeaveType] = useState('Sick Leave');
   const [leaveReason, setLeaveReason] = useState('');
@@ -26,7 +26,7 @@ const RequestsScreen = ({ navigation }) => {
   const [leaveBalances, setLeaveBalances] = useState([]);
   const [loadingBalances, setLoadingBalances] = useState(false);
 
-  // ---------- Schedule Request ----------
+  // ---------- Schedule ----------
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleStart, setScheduleStart] = useState('09:00');
   const [scheduleEnd, setScheduleEnd] = useState('17:00');
@@ -34,14 +34,14 @@ const RequestsScreen = ({ navigation }) => {
   const [submittingSchedule, setSubmittingSchedule] = useState(false);
   const [showScheduleCalendar, setShowScheduleCalendar] = useState(false);
 
-  // ---------- Appeal Request ----------
+  // ---------- Appeal ----------
   const [appealDate, setAppealDate] = useState('');
   const [appealReason, setAppealReason] = useState('');
   const [appealImage, setAppealImage] = useState(null);
   const [submittingAppeal, setSubmittingAppeal] = useState(false);
   const [showAppealCalendar, setShowAppealCalendar] = useState(false);
 
-  // ---------- Correction (Forgot Clock) ----------
+  // ---------- Correction ----------
   const [correctionDate, setCorrectionDate] = useState('');
   const [correctionType, setCorrectionType] = useState('clock_in');
   const [correctionTime, setCorrectionTime] = useState('');
@@ -50,10 +50,19 @@ const RequestsScreen = ({ navigation }) => {
   const [submittingCorrection, setSubmittingCorrection] = useState(false);
   const [showCorrectionCalendar, setShowCorrectionCalendar] = useState(false);
 
+  // ---------- Overtime ----------
+  const [overtimeDate, setOvertimeDate] = useState('');
+  const [overtimeStart, setOvertimeStart] = useState('');
+  const [overtimeEnd, setOvertimeEnd] = useState('');
+  const [overtimeReason, setOvertimeReason] = useState('');
+  const [overtimeImage, setOvertimeImage] = useState(null);
+  const [submittingOvertime, setSubmittingOvertime] = useState(false);
+  const [showOvertimeCalendar, setShowOvertimeCalendar] = useState(false);
+
   const getTodayString = () => new Date().toISOString().split('T')[0];
   const todayStr = getTodayString();
 
-  // ----- Fetch Leave Balances -----
+  // ----- Leave Balances -----
   const fetchLeaveBalances = async () => {
     setLoadingBalances(true);
     const userId = await AsyncStorage.getItem('user_id');
@@ -68,18 +77,20 @@ const RequestsScreen = ({ navigation }) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) setLeaveBalances(data);
-      else setLeaveBalances([
-        { leave_type: 'Sick Leave', remaining_days: 12.5, annual_quota: 15 },
-        { leave_type: 'Vacation Leave', remaining_days: 8, annual_quota: 15 },
-        { leave_type: 'Emergency Leave', remaining_days: 4, annual_quota: 5 },
-      ]);
+      else {
+        setLeaveBalances([
+          { leave_type: 'Sick Leave', remaining_days: 15, annual_quota: 15 },
+          { leave_type: 'Vacation Leave', remaining_days: 15, annual_quota: 15 },
+          { leave_type: 'Emergency Leave', remaining_days: 5, annual_quota: 5 },
+        ]);
+      }
       setShowBalancesModal(true);
     } catch (err) {
       console.error(err);
       setLeaveBalances([
-        { leave_type: 'Sick Leave', remaining_days: 12.5, annual_quota: 15 },
-        { leave_type: 'Vacation Leave', remaining_days: 8, annual_quota: 15 },
-        { leave_type: 'Emergency Leave', remaining_days: 4, annual_quota: 5 },
+        { leave_type: 'Sick Leave', remaining_days: 15, annual_quota: 15 },
+        { leave_type: 'Vacation Leave', remaining_days: 15, annual_quota: 15 },
+        { leave_type: 'Emergency Leave', remaining_days: 5, annual_quota: 5 },
       ]);
       setShowBalancesModal(true);
     } finally {
@@ -113,39 +124,37 @@ const RequestsScreen = ({ navigation }) => {
     finally { setSubmittingLeave(false); }
   };
 
-  // ----- Schedule Submission (mock) -----
-  // ==========================================
-// Schedule Request (real API)
-// ==========================================
-const handleSubmitSchedule = async () => {
-  if (!scheduleDate) { Alert.alert('Required', 'Select a date.'); return; }
-  if (!scheduleStart || !scheduleEnd) { Alert.alert('Required', 'Enter times.'); return; }
-  setSubmittingSchedule(true);
-  try {
-    const result = await submitScheduleRequest({
-      request_type: 'new',        // or 'change' if you implement editing
-      date: scheduleDate,
-      place: 'Main Campus',       // you may want to let user pick a location
-      course: scheduleReason || 'General', // you can add a course field
-      start_time: scheduleStart,
-      end_time: scheduleEnd,
-      reason: scheduleReason
-    });
-    if (result.success) {
-      Alert.alert('Request Sent', 'Your schedule request has been submitted.');
-      setScheduleDate('');
-      setScheduleStart('09:00');
-      setScheduleEnd('17:00');
-      setScheduleReason('');
-    } else {
-      Alert.alert('Error', result.message || 'Failed to submit request.');
+  // ----- Schedule Submission -----
+  const handleSubmitSchedule = async () => {
+    if (!scheduleDate) { Alert.alert('Required', 'Select a date.'); return; }
+    if (!scheduleStart || !scheduleEnd) { Alert.alert('Required', 'Enter times.'); return; }
+    setSubmittingSchedule(true);
+    try {
+      const result = await submitScheduleRequest({
+        request_type: 'new',
+        date: scheduleDate,
+        place: 'Main Campus',
+        course: scheduleReason || 'General',
+        start_time: scheduleStart,
+        end_time: scheduleEnd,
+        reason: scheduleReason
+      });
+      if (result.success) {
+        Alert.alert('Request Sent', 'Your schedule request has been submitted.');
+        setScheduleDate('');
+        setScheduleStart('09:00');
+        setScheduleEnd('17:00');
+        setScheduleReason('');
+      } else {
+        Alert.alert('Error', result.message || 'Failed to submit request.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error. Please try again.');
+    } finally {
+      setSubmittingSchedule(false);
     }
-  } catch (error) {
-    Alert.alert('Error', 'Network error. Please try again.');
-  } finally {
-    setSubmittingSchedule(false);
-  }
-};
+  };
+
   // ----- Appeal Submission -----
   const pickImage = async (setFn) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -229,7 +238,44 @@ const handleSubmitSchedule = async () => {
     finally { setSubmittingCorrection(false); }
   };
 
-  // ----- Reusable Calendar -----
+  // ----- Overtime Submission -----
+  const handleSubmitOvertime = async () => {
+    if (!overtimeDate) { Alert.alert('Required', 'Select a date.'); return; }
+    if (!overtimeStart || !overtimeEnd) { Alert.alert('Required', 'Enter start and end time.'); return; }
+    if (!overtimeReason.trim()) { Alert.alert('Required', 'Provide a reason.'); return; }
+    setSubmittingOvertime(true);
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      const formData = new FormData();
+      formData.append('date', overtimeDate);
+      formData.append('start_time', overtimeStart);
+      formData.append('end_time', overtimeEnd);
+      formData.append('reason', overtimeReason.trim());
+      if (overtimeImage) {
+        const filename = overtimeImage.split('/').pop();
+        const fileType = filename.split('.').pop();
+        formData.append('attachment', { uri: overtimeImage, name: filename, type: `image/${fileType}` });
+      }
+      const response = await fetch(`${API_URL}/overtime-requests`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const result = await response.json();
+      if (result.success) {
+        Alert.alert('Success', 'Overtime request submitted.');
+        setOvertimeDate(''); setOvertimeStart(''); setOvertimeEnd(''); setOvertimeReason(''); setOvertimeImage(null);
+      } else {
+        Alert.alert('Error', result.message || 'Submission failed.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Network error.');
+    } finally {
+      setSubmittingOvertime(false);
+    }
+  };
+
+  // ----- Reusable Calendar Modal -----
   const renderCalendar = (show, setShow, date, setDate, minDate = todayStr) => {
     if (!show) return null;
     return (
@@ -249,199 +295,238 @@ const handleSubmitSchedule = async () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <X size={24} color="#0f172a" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Requests</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Tab Bar (4 tabs) */}
-      <View style={styles.tabBar}>
-        {['leave', 'schedule', 'appeal', 'correction'].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab === 'leave' ? 'Leave' : tab === 'schedule' ? 'Schedule' : tab === 'appeal' ? 'Appeal' : 'Correction'}
-            </Text>
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <X size={24} color="#0f172a" />
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Leave Tab */}
-        {activeTab === 'leave' && (
-          <View>
-            <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('LeaveHistory')}>
-              <Text style={styles.historyButtonText}>View Leave History</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.balancesButton} onPress={fetchLeaveBalances}>
-              <Text style={styles.balancesButtonText}>View Leave Balances</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Date</Text>
-            <TouchableOpacity style={styles.datePicker} onPress={() => setShowLeaveCalendar(true)}>
-              <CalendarIcon size={20} color="#00897B" />
-              <Text style={styles.dateText}>{leaveDate || 'Select date'}</Text>
-            </TouchableOpacity>
-            {renderCalendar(showLeaveCalendar, setShowLeaveCalendar, leaveDate, setLeaveDate)}
-
-            <Text style={styles.label}>Type</Text>
-            <View style={styles.typeGroup}>
-              {['Sick Leave', 'Vacation', 'Emergency', 'Other'].map(t => (
-                <TouchableOpacity key={t} style={[styles.typeChip, leaveType === t && styles.typeChipActive]} onPress={() => setLeaveType(t)}>
-                  <Text style={[styles.typeChipText, leaveType === t && styles.typeChipTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.label}>Reason</Text>
-            <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Explain reason..." value={leaveReason} onChangeText={setLeaveReason} />
-
-            <Text style={styles.label}>Attachment (optional)</Text>
-            <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setLeaveImage)}>
-              <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{leaveImage ? 'Change Image' : 'Upload'}</Text>
-            </TouchableOpacity>
-            {leaveImage && <Image source={{ uri: leaveImage }} style={styles.previewImage} />}
-
-            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitLeave} disabled={submittingLeave}>
-              <Text style={styles.submitBtnText}>{submittingLeave ? 'Submitting...' : 'Submit Leave Request'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Schedule Tab */}
-        {activeTab === 'schedule' && (
-          <View>
-            <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('ScheduleHistory')}>
-              <Text style={styles.historyButtonText}>View Schedule History</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Date</Text>
-            <TouchableOpacity style={styles.datePicker} onPress={() => setShowScheduleCalendar(true)}>
-              <CalendarIcon size={20} color="#00897B" />
-              <Text style={styles.dateText}>{scheduleDate || 'Select date'}</Text>
-            </TouchableOpacity>
-            {renderCalendar(showScheduleCalendar, setShowScheduleCalendar, scheduleDate, setScheduleDate)}
-
-            <Text style={styles.label}>Start Time</Text>
-            <TextInput style={styles.input} placeholder="09:00" value={scheduleStart} onChangeText={setScheduleStart} />
-
-            <Text style={styles.label}>End Time</Text>
-            <TextInput style={styles.input} placeholder="17:00" value={scheduleEnd} onChangeText={setScheduleEnd} />
-
-            <Text style={styles.label}>Reason / Course</Text>
-            <TextInput style={[styles.input, styles.textArea]} multiline placeholder="e.g., Need to reschedule class..." value={scheduleReason} onChangeText={setScheduleReason} />
-
-            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitSchedule} disabled={submittingSchedule}>
-              <Text style={styles.submitBtnText}>{submittingSchedule ? 'Sending...' : 'Send Schedule Request'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Appeal Tab */}
-        {activeTab === 'appeal' && (
-          <View>
-            <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('AppealHistory')}>
-              <Text style={styles.historyButtonText}>View Appeal History</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Date</Text>
-            <TouchableOpacity style={styles.datePicker} onPress={() => setShowAppealCalendar(true)}>
-              <CalendarIcon size={20} color="#00897B" />
-              <Text style={styles.dateText}>{appealDate || 'Select date'}</Text>
-            </TouchableOpacity>
-            {renderCalendar(showAppealCalendar, setShowAppealCalendar, appealDate, setAppealDate)}
-
-            <Text style={styles.label}>Reason</Text>
-            <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Explain why you couldn't clock in/out..." value={appealReason} onChangeText={setAppealReason} />
-
-            <Text style={styles.label}>Proof (optional)</Text>
-            <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setAppealImage)}>
-              <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{appealImage ? 'Change Image' : 'Upload'}</Text>
-            </TouchableOpacity>
-            {appealImage && <Image source={{ uri: appealImage }} style={styles.previewImage} />}
-
-            <TouchableOpacity style={styles.submitBtn} onPress={submitAppeal} disabled={submittingAppeal}>
-              <Text style={styles.submitBtnText}>{submittingAppeal ? 'Submitting...' : 'Submit Appeal'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Correction Tab */}
-        {activeTab === 'correction' && (
-          <View>
-            <Text style={styles.label}>Date</Text>
-            <TouchableOpacity style={styles.datePicker} onPress={() => setShowCorrectionCalendar(true)}>
-              <CalendarIcon size={20} color="#00897B" />
-              <Text style={styles.dateText}>{correctionDate || 'Select date'}</Text>
-            </TouchableOpacity>
-            {renderCalendar(showCorrectionCalendar, setShowCorrectionCalendar, correctionDate, setCorrectionDate)}
-
-            <Text style={styles.label}>What to correct?</Text>
-            <View style={styles.typeGroup}>
-              <TouchableOpacity style={[styles.typeChip, correctionType === 'clock_in' && styles.typeChipActive]} onPress={() => setCorrectionType('clock_in')}>
-                <Text style={[styles.typeChipText, correctionType === 'clock_in' && styles.typeChipTextActive]}>Clock In</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.typeChip, correctionType === 'clock_out' && styles.typeChipActive]} onPress={() => setCorrectionType('clock_out')}>
-                <Text style={[styles.typeChipText, correctionType === 'clock_out' && styles.typeChipTextActive]}>Clock Out</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Time (HH:MM)</Text>
-            <TextInput style={styles.input} placeholder="09:00" value={correctionTime} onChangeText={setCorrectionTime} />
-
-            <Text style={styles.label}>Reason</Text>
-            <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Why did you forget to clock?" value={correctionReason} onChangeText={setCorrectionReason} />
-
-            <Text style={styles.label}>Selfie (proof)</Text>
-            <TouchableOpacity style={styles.uploadBtn} onPress={async () => { const uri = await takeSelfie(); if (uri) setCorrectionSelfie(uri); }}>
-              <Camera size={18} color="#0d9488" /><Text style={styles.uploadText}>{correctionSelfie ? 'Retake Selfie' : 'Take Selfie'}</Text>
-            </TouchableOpacity>
-            {correctionSelfie && <Image source={{ uri: correctionSelfie }} style={styles.previewImage} />}
-
-            <TouchableOpacity style={styles.submitBtn} onPress={submitCorrection} disabled={submittingCorrection}>
-              <Text style={styles.submitBtnText}>{submittingCorrection ? 'Submitting...' : 'Submit Correction Request'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Leave Balances Modal */}
-      <RNModal visible={showBalancesModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.balancesModal}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Leave Balances ({new Date().getFullYear()})</Text>
-              <TouchableOpacity onPress={() => setShowBalancesModal(false)}><X size={22} color="#64748B" /></TouchableOpacity>
-            </View>
-            {loadingBalances ? (
-              <ActivityIndicator size="small" color="#00897B" style={{ marginVertical: 20 }} />
-            ) : leaveBalances.length === 0 ? (
-              <Text style={styles.emptyText}>No balances found.</Text>
-            ) : (
-              leaveBalances.map((item, idx) => (
-                <View key={idx} style={styles.balanceRow}>
-                  <Text style={styles.balanceType}>{item.leave_type}</Text>
-                  <Text style={styles.balanceDays}>{item.remaining_days} days left</Text>
-                </View>
-              ))
-            )}
-            <TouchableOpacity style={styles.closeBalancesBtn} onPress={() => setShowBalancesModal(false)}>
-              <Text>Close</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.headerTitle}>My Requests</Text>
+          <View style={{ width: 40 }} />
         </View>
-      </RNModal>
-    </SafeAreaView>
+
+        {/* Tab Bar */}
+        <View style={styles.tabBar}>
+          {['leave', 'schedule', 'appeal', 'correction', 'overtime'].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.activeTab]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                {tab === 'leave' ? 'Leave' : tab === 'schedule' ? 'Schedule' : tab === 'appeal' ? 'Appeal' : tab === 'correction' ? 'Correction' : 'Overtime'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+          {/* Leave Tab */}
+          {activeTab === 'leave' && (
+            <View>
+              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('LeaveHistory')}>
+                <Text style={styles.historyButtonText}>View Leave History</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.balancesButton} onPress={fetchLeaveBalances}>
+                <Text style={styles.balancesButtonText}>View Leave Balances</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Date</Text>
+              <TouchableOpacity style={styles.datePicker} onPress={() => setShowLeaveCalendar(true)}>
+                <CalendarIcon size={20} color="#00897B" />
+                <Text style={styles.dateText}>{leaveDate || 'Select date'}</Text>
+              </TouchableOpacity>
+              {renderCalendar(showLeaveCalendar, setShowLeaveCalendar, leaveDate, setLeaveDate)}
+
+              <Text style={styles.label}>Type</Text>
+              <View style={styles.typeGroup}>
+                {['Sick Leave', 'Vacation', 'Emergency', 'Other'].map(t => (
+                  <TouchableOpacity key={t} style={[styles.typeChip, leaveType === t && styles.typeChipActive]} onPress={() => setLeaveType(t)}>
+                    <Text style={[styles.typeChipText, leaveType === t && styles.typeChipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>Reason</Text>
+              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Explain reason..." value={leaveReason} onChangeText={setLeaveReason} />
+
+              <Text style={styles.label}>Attachment (optional)</Text>
+              <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setLeaveImage)}>
+                <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{leaveImage ? 'Change Image' : 'Upload'}</Text>
+              </TouchableOpacity>
+              {leaveImage && <Image source={{ uri: leaveImage }} style={styles.previewImage} />}
+
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitLeave} disabled={submittingLeave}>
+                <Text style={styles.submitBtnText}>{submittingLeave ? 'Submitting...' : 'Submit Leave Request'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Schedule Tab */}
+          {activeTab === 'schedule' && (
+            <View>
+              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('ScheduleHistory')}>
+                <Text style={styles.historyButtonText}>View Schedule History</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Date</Text>
+              <TouchableOpacity style={styles.datePicker} onPress={() => setShowScheduleCalendar(true)}>
+                <CalendarIcon size={20} color="#00897B" />
+                <Text style={styles.dateText}>{scheduleDate || 'Select date'}</Text>
+              </TouchableOpacity>
+              {renderCalendar(showScheduleCalendar, setShowScheduleCalendar, scheduleDate, setScheduleDate)}
+
+              <Text style={styles.label}>Start Time</Text>
+              <TextInput style={styles.input} placeholder="09:00" value={scheduleStart} onChangeText={setScheduleStart} />
+
+              <Text style={styles.label}>End Time</Text>
+              <TextInput style={styles.input} placeholder="17:00" value={scheduleEnd} onChangeText={setScheduleEnd} />
+
+              <Text style={styles.label}>Reason / Course</Text>
+              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="e.g., Need to reschedule class..." value={scheduleReason} onChangeText={setScheduleReason} />
+
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitSchedule} disabled={submittingSchedule}>
+                <Text style={styles.submitBtnText}>{submittingSchedule ? 'Sending...' : 'Send Schedule Request'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Appeal Tab */}
+          {activeTab === 'appeal' && (
+            <View>
+              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('AppealHistory')}>
+                <Text style={styles.historyButtonText}>View Appeal History</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Date</Text>
+              <TouchableOpacity style={styles.datePicker} onPress={() => setShowAppealCalendar(true)}>
+                <CalendarIcon size={20} color="#00897B" />
+                <Text style={styles.dateText}>{appealDate || 'Select date'}</Text>
+              </TouchableOpacity>
+              {renderCalendar(showAppealCalendar, setShowAppealCalendar, appealDate, setAppealDate)}
+
+              <Text style={styles.label}>Reason</Text>
+              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Explain why you couldn't clock in/out..." value={appealReason} onChangeText={setAppealReason} />
+
+              <Text style={styles.label}>Proof (optional)</Text>
+              <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setAppealImage)}>
+                <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{appealImage ? 'Change Image' : 'Upload'}</Text>
+              </TouchableOpacity>
+              {appealImage && <Image source={{ uri: appealImage }} style={styles.previewImage} />}
+
+              <TouchableOpacity style={styles.submitBtn} onPress={submitAppeal} disabled={submittingAppeal}>
+                <Text style={styles.submitBtnText}>{submittingAppeal ? 'Submitting...' : 'Submit Appeal'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Correction Tab */}
+          {activeTab === 'correction' && (
+            <View>
+              <Text style={styles.label}>Date</Text>
+              <TouchableOpacity style={styles.datePicker} onPress={() => setShowCorrectionCalendar(true)}>
+                <CalendarIcon size={20} color="#00897B" />
+                <Text style={styles.dateText}>{correctionDate || 'Select date'}</Text>
+              </TouchableOpacity>
+              {renderCalendar(showCorrectionCalendar, setShowCorrectionCalendar, correctionDate, setCorrectionDate)}
+
+              <Text style={styles.label}>What to correct?</Text>
+              <View style={styles.typeGroup}>
+                <TouchableOpacity style={[styles.typeChip, correctionType === 'clock_in' && styles.typeChipActive]} onPress={() => setCorrectionType('clock_in')}>
+                  <Text style={[styles.typeChipText, correctionType === 'clock_in' && styles.typeChipTextActive]}>Clock In</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.typeChip, correctionType === 'clock_out' && styles.typeChipActive]} onPress={() => setCorrectionType('clock_out')}>
+                  <Text style={[styles.typeChipText, correctionType === 'clock_out' && styles.typeChipTextActive]}>Clock Out</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Time (HH:MM)</Text>
+              <TextInput style={styles.input} placeholder="09:00" value={correctionTime} onChangeText={setCorrectionTime} />
+
+              <Text style={styles.label}>Reason</Text>
+              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Why did you forget to clock?" value={correctionReason} onChangeText={setCorrectionReason} />
+
+              <Text style={styles.label}>Selfie (proof)</Text>
+              <TouchableOpacity style={styles.uploadBtn} onPress={async () => { const uri = await takeSelfie(); if (uri) setCorrectionSelfie(uri); }}>
+                <Camera size={18} color="#0d9488" /><Text style={styles.uploadText}>{correctionSelfie ? 'Retake Selfie' : 'Take Selfie'}</Text>
+              </TouchableOpacity>
+              {correctionSelfie && <Image source={{ uri: correctionSelfie }} style={styles.previewImage} />}
+
+              <TouchableOpacity style={styles.submitBtn} onPress={submitCorrection} disabled={submittingCorrection}>
+                <Text style={styles.submitBtnText}>{submittingCorrection ? 'Submitting...' : 'Submit Correction Request'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Overtime Tab */}
+          {activeTab === 'overtime' && (
+            <View>
+              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('OvertimeHistory')}>
+                <Text style={styles.historyButtonText}>View Overtime History</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Date</Text>
+              <TouchableOpacity style={styles.datePicker} onPress={() => setShowOvertimeCalendar(true)}>
+                <CalendarIcon size={20} color="#00897B" />
+                <Text style={styles.dateText}>{overtimeDate || 'Select date'}</Text>
+              </TouchableOpacity>
+              {renderCalendar(showOvertimeCalendar, setShowOvertimeCalendar, overtimeDate, setOvertimeDate)}
+
+              <Text style={styles.label}>Start Time (HH:MM)</Text>
+              <TextInput style={styles.input} placeholder="18:00" value={overtimeStart} onChangeText={setOvertimeStart} />
+
+              <Text style={styles.label}>End Time (HH:MM)</Text>
+              <TextInput style={styles.input} placeholder="20:00" value={overtimeEnd} onChangeText={setOvertimeEnd} />
+
+              <Text style={styles.label}>Reason / Task</Text>
+              <TextInput style={[styles.input, styles.textArea]} multiline placeholder="Why is overtime needed?" value={overtimeReason} onChangeText={setOvertimeReason} />
+
+              <Text style={styles.label}>Attachment (optional)</Text>
+              <TouchableOpacity style={styles.uploadBtn} onPress={() => pickImage(setOvertimeImage)}>
+                <Upload size={18} color="#0d9488" /><Text style={styles.uploadText}>{overtimeImage ? 'Change Image' : 'Upload'}</Text>
+              </TouchableOpacity>
+              {overtimeImage && <Image source={{ uri: overtimeImage }} style={styles.previewImage} />}
+
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitOvertime} disabled={submittingOvertime}>
+                <Text style={styles.submitBtnText}>{submittingOvertime ? 'Submitting...' : 'Submit Overtime Request'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Leave Balances Modal */}
+        <RNModal visible={showBalancesModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.balancesModal}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalTitle}>Leave Balances ({new Date().getFullYear()})</Text>
+                <TouchableOpacity onPress={() => setShowBalancesModal(false)}><X size={22} color="#64748B" /></TouchableOpacity>
+              </View>
+              {loadingBalances ? (
+                <ActivityIndicator size="small" color="#00897B" style={{ marginVertical: 20 }} />
+              ) : leaveBalances.length === 0 ? (
+                <Text style={styles.emptyText}>No balances found.</Text>
+              ) : (
+                leaveBalances.map((item, idx) => (
+                  <View key={idx} style={styles.balanceRow}>
+                    <Text style={styles.balanceType}>{item.leave_type}</Text>
+                    <Text style={styles.balanceDays}>{item.remaining_days} / {item.annual_quota || 15} days left</Text>
+                  </View>
+                ))
+              )}
+              <TouchableOpacity style={styles.closeBalancesBtn} onPress={() => setShowBalancesModal(false)}>
+                <Text>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </RNModal>
+      </SafeAreaView>
+    </>
   );
 };
 
+// ---------- STYLES ----------
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#fff' },

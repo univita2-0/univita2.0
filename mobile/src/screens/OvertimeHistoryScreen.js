@@ -1,16 +1,17 @@
-// src/screens/AppealHistoryScreen.js
+// src/screens/OvertimeHistoryScreen.js
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, StatusBar
+  View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
+  ActivityIndicator, StatusBar
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Calendar, FileText } from 'lucide-react-native';
+import { X, Calendar, Clock, FileText } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './api';
 
-export default function AppealHistoryScreen({ navigation }) {
+export default function OvertimeHistoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [appealHistory, setAppealHistory] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,25 +20,23 @@ export default function AppealHistoryScreen({ navigation }) {
 
   const loadHistory = async () => {
     const token = await AsyncStorage.getItem('auth_token');
-    const employeeId = await AsyncStorage.getItem('employee_id');
-    if (!employeeId) return;
     try {
-      const res = await fetch(`${API_URL}/attendance-appeals/user/${employeeId}`, {
-        headers: { Authorization: `Bearer ${token || ''}` }
+      const res = await fetch(`${API_URL}/overtime-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      setAppealHistory(Array.isArray(data) ? data : []);
+      setHistory(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
-      setAppealHistory([]);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
   };
 
   const getStatusColor = (status) => {
-    if (status === 'approved') return '#10B981';
-    if (status === 'rejected') return '#EF4444';
+    if (status === 'Approved') return '#10B981';
+    if (status === 'Rejected') return '#EF4444';
     return '#F59E0B';
   };
 
@@ -57,12 +56,12 @@ export default function AppealHistoryScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <X size={24} color="#0f172a" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Appeal History</Text>
+          <Text style={styles.headerTitle}>Overtime History</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <FlatList
-          data={appealHistory}
+          data={history}
           keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
@@ -71,21 +70,25 @@ export default function AppealHistoryScreen({ navigation }) {
                 <Calendar size={16} color="#00897B" />
                 <Text style={styles.date}>{item.date}</Text>
               </View>
+              <View style={styles.cardBody}>
+                <Clock size={14} color="#64748B" />
+                <Text style={styles.time}>{item.start_time} – {item.end_time}</Text>
+              </View>
               <Text style={styles.reason}>{item.reason}</Text>
               <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}15` }]}>
                 <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                  {item.status?.toUpperCase()}
+                  {item.status?.toUpperCase() || 'PENDING'}
                 </Text>
               </View>
-              {item.image_url && (
+              {item.attachment_url && (
                 <View style={styles.attachmentBadge}>
                   <FileText size={12} color="#64748B" />
-                  <Text style={styles.attachmentText}>Has proof</Text>
+                  <Text style={styles.attachmentText}>Has attachment</Text>
                 </View>
               )}
             </View>
           )}
-          ListEmptyComponent={<Text style={styles.emptyText}>No appeals found.</Text>}
+          ListEmptyComponent={<Text style={styles.emptyText}>No overtime requests found.</Text>}
         />
       </SafeAreaView>
     </>
@@ -118,6 +121,8 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   date: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  cardBody: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  time: { fontSize: 13, color: '#475569' },
   reason: { fontSize: 13, color: '#475569', marginBottom: 10 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700' },

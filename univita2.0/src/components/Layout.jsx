@@ -91,7 +91,7 @@ const menuConfig = [
       { id: 'manage-reasons', label: 'Manage Visit Reasons', path: 'manage-reasons', roles: ['admin'] },
     
     { id: 'today-visitors', label: "Today's Visitors", path: 'today-visitors', roles: ['security'] }, // NEW
-    
+    { id: 'completed-visits', label: "Completed Visits", path: 'completed-visits', roles: ['admin', 'security'] },
     { id: 'track-visitor', label: 'Track Visitor', path: 'track-visitor', roles: ['security'] },
     { id: 'manage-ble', label: 'Manage BLE Tags', path: 'manage-ble', roles: ['security', 'admin'] }
   ],

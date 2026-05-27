@@ -1601,19 +1601,29 @@ app.put('/api/visitor-requests/:id/return', authenticateToken, (req, res) => {
   // Get the BLE tag before clearing
   db.query("SELECT ble_id FROM visitor_requests WHERE id = ?", [id], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    const ble_id = rows[0]?.ble_id;
+    if (rows.length === 0) return res.status(404).json({ error: "Request not found" });
+    
+    const ble_id = rows[0].ble_id;
+    
+    // If tag exists, remove from live tracking maps
     if (ble_id) {
       delete visitorDestinations[ble_id];   // 🔓 Remove the lock
       delete liveVisitors[ble_id];          // Remove from map
       console.log(`🔓 Cleared destination lock for ${ble_id}`);
     }
 
-    // Update database
+    // Update database: copy ble_id to used_ble_id, then clear ble_id, mark returned
     db.query(
-      "UPDATE visitor_requests SET returned = TRUE, returned_at = NOW(), ble_id = NULL WHERE id = ? AND arrived = TRUE AND returned = FALSE",
-      [id],
-      (err) => {
+      `UPDATE visitor_requests 
+       SET returned = TRUE, returned_at = NOW(), 
+           used_ble_id = ?, ble_id = NULL 
+       WHERE id = ? AND arrived = TRUE AND returned = FALSE`,
+      [ble_id, id],
+      (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
+        if (result.affectedRows === 0) {
+          return res.status(400).json({ error: "Visitor not checked in or already returned" });
+        }
         res.json({ success: true });
       }
     );
@@ -1758,6 +1768,25 @@ app.put('/api/appointments/:id/status', (req, res) => {
         });
       });
     });
+  });
+});
+
+// PUT /api/appointments/:id – update visit_date and/or visit_time
+app.put('/api/appointments/:id', authenticateToken, (req, res) => {
+  // Only admin and security can edit appointments (adjust roles as needed)
+  if (req.user.role !== 'admin' && req.user.role !== 'security') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const { visit_date, visit_time } = req.body;
+  if (!visit_date || !visit_time) {
+    return res.status(400).json({ error: 'Date and time are required' });
+  }
+  const sql = `UPDATE visitor_requests SET visit_date = ?, visit_time = ? WHERE id = ?`;
+  db.query(sql, [visit_date, visit_time, id], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Appointment not found' });
+    res.json({ success: true });
   });
 });
 
@@ -2308,26 +2337,36 @@ app.get('/api/attendance-monthly', async (req, res) => {
   if (!month || !year) {
     return res.status(400).json({ error: 'Month and year required' });
   }
-  
+
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
-  
+
   const sql = `
     SELECT 
       u.employee_id, 
       u.full_name,
-      COALESCE(SUM(TIMESTAMPDIFF(MINUTE, a.time_in, a.time_out) / 60), 0) as regular_hours,
-      0 as overtime_hours,
-      COALESCE(SUM(CASE WHEN a.status = 'on leave' THEN 1 ELSE 0 END), 0) as leave_days
+      COALESCE(SUM(TIMESTAMPDIFF(MINUTE, a.time_in, a.time_out) / 60), 0) AS regular_hours,
+      0 AS overtime_hours,
+      COALESCE(SUM(CASE WHEN a.status = 'on leave' THEN 1 ELSE 0 END), 0) AS leave_days,
+      COALESCE(SUM(
+        CASE 
+          WHEN a.time_in IS NOT NULL 
+               AND s.start_time IS NOT NULL 
+               AND TIME_TO_SEC(TIMEDIFF(a.time_in, s.start_time)) > 900   -- 15 minutes grace period
+          THEN TIME_TO_SEC(TIMEDIFF(a.time_in, s.start_time)) / 60
+          ELSE 0
+        END
+      ), 0) AS late_minutes
     FROM users u
     LEFT JOIN attendance a ON u.employee_id = a.user_id 
       AND a.date BETWEEN ? AND ? 
-      AND a.status != 'on leave'
+      AND a.status NOT IN ('on leave', 'absent')
+    LEFT JOIN schedules s ON a.schedule_id = s.id
     WHERE u.role = 'instructor' AND u.status = 'active'
     GROUP BY u.id
   `;
-  
+
   db.query(sql, [startDate, endDate], (err, results) => {
     if (err) {
       console.error("Attendance monthly error:", err);
@@ -3432,6 +3471,82 @@ app.get('/api/visitor-history', authenticateToken, (req, res) => {
       console.error("Visitor history error:", err);
       return res.status(500).json({ error: err.message });
     }
+    res.json(rows);
+  });
+});
+
+// GET /api/visitor-requests/history - completed visits between dates
+app.get('/api/visitor-requests/history', authenticateToken, (req, res) => {
+  // Allow security, admin, and HR roles
+  if (req.user.role !== 'security' && req.user.role !== 'admin' && req.user.role !== 'hr_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { startDate, endDate } = req.query;
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: 'Start and end dates required' });
+  }
+
+  const sql = `
+    SELECT 
+      id, 
+      DATE_FORMAT(visit_date, '%Y-%m-%d') as visit_date,
+      first_name, last_name, email, phone,
+      visit_time, reason,
+      arrived_at, returned_at,
+      destination, 
+      COALESCE(used_ble_id, ble_id) AS ble_id
+    FROM visitor_requests
+    WHERE status = 'APPROVED'
+      AND arrived = 1
+      AND returned = 1
+      AND visit_date BETWEEN ? AND ?
+    ORDER BY visit_date DESC, arrived_at DESC
+  `;
+
+  db.query(sql, [startDate, endDate], (err, results) => {
+    if (err) {
+      console.error('Visitor history error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // Add computed duration and formatted times
+    results.forEach(r => {
+      if (r.arrived_at && r.returned_at) {
+        const durationMs = new Date(r.returned_at) - new Date(r.arrived_at);
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        r.duration = `${hours}h ${minutes}m`;
+      } else {
+        r.duration = '—';
+      }
+      r.arrived_time = r.arrived_at
+        ? new Date(r.arrived_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '—';
+      r.returned_time = r.returned_at
+        ? new Date(r.returned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '—';
+    });
+
+    res.json(results);
+  });
+});
+
+app.post('/api/overtime-requests', authenticateToken, upload.single('attachment'), (req, res) => {
+  const { date, start_time, end_time, reason } = req.body;
+  const userId = req.user.id;
+  const attachment = req.file ? `/uploads/${req.file.filename}` : null;
+  db.query(
+    "INSERT INTO overtime_requests (user_id, date, start_time, end_time, reason, attachment) VALUES (?, ?, ?, ?, ?, ?)",
+    [userId, date, start_time, end_time, reason, attachment],
+    (err) => { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }
+  );
+});
+
+app.get('/api/overtime-requests', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+  db.query("SELECT * FROM overtime_requests WHERE user_id = ? ORDER BY date DESC", [userId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
