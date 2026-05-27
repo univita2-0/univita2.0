@@ -2,14 +2,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl,
-  Modal, TouchableOpacity, FlatList
+  Modal, TouchableOpacity, FlatList, StatusBar
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
-import { MapPin, Clock, Calendar as CalendarIcon, X, List } from 'lucide-react-native';
+import { MapPin, Clock, Calendar as CalendarIcon, X, List, Star } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchEvents } from './api';
 
 export default function CalendarScreen() {
+  const insets = useSafeAreaInsets();
   const [events, setEvents] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [markedDates, setMarkedDates] = useState({});
@@ -85,7 +87,6 @@ export default function CalendarScreen() {
     const dayEvents = events.filter(e => e.date?.split('T')[0] === date);
     const dayHolidays = holidays.filter(h => h.date === date);
     const allItems = [...dayEvents, ...dayHolidays];
-
     if (allItems.length > 0) {
       setSelectedDate(date);
       setSelectedDateEvents(allItems);
@@ -145,158 +146,213 @@ export default function CalendarScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00897B"]} />}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Shared Calendar</Text>
-        </View>
-
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => setShowEventsModal(true)}>
-            <List size={18} color="#00897B" />
-            <Text style={styles.actionButtonText}>Upcoming Events</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, styles.holidayButton]} onPress={() => setShowHolidaysModal(true)}>
-            <CalendarIcon size={18} color="#EF4444" />
-            <Text style={[styles.actionButtonText, { color: '#EF4444' }]}>Philippine Holidays</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.card}>
-          <Calendar
-            markedDates={markedDates}
-            onDayPress={onDayPress}
-            theme={{ todayTextColor: '#00897B', arrowColor: '#00897B' }}
-          />
-        </View>
-      </ScrollView>
-
-      {/* Events Modal */}
-      <Modal visible={showEventsModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Upcoming Events</Text>
-              <TouchableOpacity onPress={() => setShowEventsModal(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {events.length === 0 ? (
-              <Text style={styles.emptyModalText}>No upcoming events</Text>
-            ) : (
-              <FlatList
-                data={events}
-                keyExtractor={(item, idx) => (item.id ? item.id.toString() : `event-${idx}`)}
-                renderItem={renderEventItem}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00897B"]} />}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <CalendarIcon size={28} color="#00897B" />
+            <Text style={styles.title}>Shared Calendar</Text>
           </View>
-        </View>
-      </Modal>
 
-      {/* Holidays Modal */}
-      <Modal visible={showHolidaysModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Philippine Holidays</Text>
-              <TouchableOpacity onPress={() => setShowHolidaysModal(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {holidays.length === 0 ? (
-              <Text style={styles.emptyModalText}>No upcoming holidays</Text>
-            ) : (
-              <FlatList
-                data={holidays}
-                keyExtractor={item => item.id}
-                renderItem={renderHolidayItem}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => setShowEventsModal(true)}
+              activeOpacity={0.7}
+            >
+              <List size={18} color="#00897B" />
+              <Text style={styles.actionButtonText}>Upcoming Events</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.holidayButton]}
+              onPress={() => setShowHolidaysModal(true)}
+              activeOpacity={0.7}
+            >
+              <Star size={18} color="#EF4444" />
+              <Text style={[styles.actionButtonText, { color: '#EF4444' }]}>Philippine Holidays</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-      {/* Date Details Modal */}
-      <Modal visible={showDateModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Events on {selectedDate}</Text>
-              <TouchableOpacity onPress={() => setShowDateModal(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={selectedDateEvents}
-              keyExtractor={(item, idx) => (item.id ? item.id.toString() : `date-${idx}`)}
-              renderItem={renderDateItem}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={<Text style={styles.emptyModalText}>No events or holidays</Text>}
+          <View style={styles.card}>
+            <Calendar
+              markedDates={markedDates}
+              onDayPress={onDayPress}
+              theme={{
+                todayTextColor: '#00897B',
+                arrowColor: '#00897B',
+                selectedDayBackgroundColor: '#00897B',
+                selectedDayTextColor: '#FFFFFF',
+                textDayFontWeight: '500',
+                textMonthFontWeight: '700',
+                textDayHeaderFontWeight: '600',
+              }}
             />
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </ScrollView>
+
+        {/* Events Modal */}
+        <Modal visible={showEventsModal} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Upcoming Events</Text>
+                <TouchableOpacity onPress={() => setShowEventsModal(false)} activeOpacity={0.7}>
+                  <X size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+              {events.length === 0 ? (
+                <Text style={styles.emptyModalText}>No upcoming events</Text>
+              ) : (
+                <FlatList
+                  data={events}
+                  keyExtractor={(item, idx) => (item.id ? item.id.toString() : `event-${idx}`)}
+                  renderItem={renderEventItem}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Holidays Modal */}
+        <Modal visible={showHolidaysModal} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Philippine Holidays</Text>
+                <TouchableOpacity onPress={() => setShowHolidaysModal(false)} activeOpacity={0.7}>
+                  <X size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+              {holidays.length === 0 ? (
+                <Text style={styles.emptyModalText}>No upcoming holidays</Text>
+              ) : (
+                <FlatList
+                  data={holidays}
+                  keyExtractor={item => item.id}
+                  renderItem={renderHolidayItem}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Date Details Modal */}
+        <Modal visible={showDateModal} animationType="fade" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Events on {selectedDate}</Text>
+                <TouchableOpacity onPress={() => setShowDateModal(false)} activeOpacity={0.7}>
+                  <X size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={selectedDateEvents}
+                keyExtractor={(item, idx) => (item.id ? item.id.toString() : `date-${idx}`)}
+                renderItem={renderDateItem}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={<Text style={styles.emptyModalText}>No events or holidays</Text>}
+              />
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </>
   );
 }
 
+// ---------- REDESIGNED STYLES ----------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  scroll: { padding: 20, paddingBottom: 40 },
-  header: { marginTop: 40, marginBottom: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  scroll: { paddingHorizontal: 20, paddingBottom: 40 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  title: { fontSize: 24, fontWeight: '700', color: '#0F172A', letterSpacing: -0.3 },
   buttonRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
-    paddingHorizontal: 10,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  holidayButton: {
-    borderColor: '#FEE2E2',
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#00897B',
-  },
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 15, marginBottom: 20 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContainer: {
-    backgroundColor: 'white',
+  holidayButton: { borderColor: '#FEE2E2' },
+  actionButtonText: { fontSize: 14, fontWeight: '600', color: '#00897B' },
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
     padding: 20,
     width: '90%',
     maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   modalTitle: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   emptyModalText: { textAlign: 'center', color: '#94A3B8', marginTop: 30 },
   modalEventCard: {
     backgroundColor: '#F8FAFC',
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#00897B',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   modalEventTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 6 },
   modalDetailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 },
@@ -305,13 +361,19 @@ const styles = StyleSheet.create({
   modalHolidayCard: {
     backgroundColor: '#FFF9F0',
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#FEE2E2',
   },
   modalHolidayName: { fontSize: 16, fontWeight: '700', color: '#991B1B', marginBottom: 4 },
   modalHolidayDate: { fontSize: 13, color: '#64748B', marginBottom: 8 },
-  modalHolidayBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start' },
+  modalHolidayBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
   modalHolidayBadgeText: { fontSize: 10, fontWeight: '700', color: '#DC2626' },
 });

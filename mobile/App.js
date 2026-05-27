@@ -25,6 +25,7 @@ import MyPayrollScreen from './src/screens/MyPayrollScreen';
 import LeaveHistoryScreen from './src/screens/LeaveHistoryScreen';
 import ScheduleHistoryScreen from './src/screens/ScheduleHistoryScreen';
 import AppealHistoryScreen from './src/screens/AppealHistoryScreen';
+import OvertimeHistoryScreen from './src/screens/OvertimeHistoryScreen';
 
 // ---------- Background Task Definition ----------
 const LOCATION_TASK_NAME = 'background-location-task';
@@ -153,6 +154,7 @@ export default function App() {
           <Stack.Screen name="LeaveHistory" component={LeaveHistoryScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ScheduleHistory" component={ScheduleHistoryScreen} options={{ headerShown: false }} />
           <Stack.Screen name="AppealHistory" component={AppealHistoryScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="OvertimeHistory" component={OvertimeHistoryScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </ErrorBoundary>

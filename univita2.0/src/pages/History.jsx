@@ -1,19 +1,35 @@
+// src/pages/History.jsx
 import React, { useState, useEffect } from 'react';
-import './History.css';
-import { ChevronDown, Filter } from 'lucide-react';
 import axios from 'axios';
+import { Eye, Calendar, Clock, X, CalendarIcon } from 'lucide-react';
+import FormalModal from '../components/FormalModal';
+import { toast } from 'react-toastify';
+import { API_BASE } from '../api';
+import './History.css';
+
+const getAuthHeaders = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+});
 
 const History = () => {
   const [historyData, setHistoryData] = useState([]);
-  const [filterDay, setFilterDay] = useState('All');
-  const [filterMonth, setFilterMonth] = useState('All');
+  const [selectedDate, setSelectedDate] = useState('');
+  
+  // Modal state
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [isPastAppointment, setIsPastAppointment] = useState(false);
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/appointments/history');
+      const res = await axios.get(`${API_BASE}/appointments/history`, getAuthHeaders());
       setHistoryData(res.data);
     } catch (err) {
       console.error("Error fetching history:", err);
+      toast.error('Failed to load history');
     }
   };
 
@@ -21,44 +37,84 @@ const History = () => {
     fetchHistory();
   }, []);
 
+  // Filter by selected date
   const filteredData = historyData.filter(item => {
-    const dateObj = new Date(item.visit_date);
-    const day = dateObj.getDate().toString();
-    const month = (dateObj.getMonth() + 1).toString();
-    const matchDay = filterDay === 'All' || day === filterDay;
-    const matchMonth = filterMonth === 'All' || month === filterMonth;
-    return matchDay && matchMonth;
+    if (!selectedDate) return true;
+    const itemDate = new Date(item.visit_date).toISOString().split('T')[0];
+    return itemDate === selectedDate;
   });
+
+  const openDetails = (appointment) => {
+    setSelectedAppointment(appointment);
+    const visitDate = appointment.visit_date?.split('T')[0] || '';
+    setEditDate(visitDate);
+    setEditTime(appointment.visit_time?.substring(0,5) || '');
+    
+    const today = new Date().toISOString().split('T')[0];
+    setIsPastAppointment(visitDate < today);
+    
+    setShowDetailModal(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editDate || !editTime) {
+      toast.warning('Please provide both date and time');
+      return;
+    }
+    setUpdating(true);
+    try {
+      await axios.put(`${API_BASE}/appointments/${selectedAppointment.id}`, {
+        visit_date: editDate,
+        visit_time: editTime
+      }, getAuthHeaders());
+      toast.success('Appointment updated successfully');
+      setShowDetailModal(false);
+      fetchHistory();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Update failed');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '—';
+    const [hour, minute] = timeStr.split(':');
+    let h = parseInt(hour, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${minute} ${ampm}`;
+  };
+
+  const formatDisplayDate = (dateStr) => {
+    if (!dateStr) return 'Select date';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  };
 
   return (
     <div className="history-container">
       <div className="history-card">
         <div className="history-header">
-          <h2 className="history-title">Visit History</h2>
-          <div className="filter-group">
-            <div className="filter-dropdown">
-              <span>Day</span>
-              <select value={filterDay} onChange={(e) => setFilterDay(e.target.value)}>
-                <option value="All">All</option>
-                {[...Array(31)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="dropdown-icon" />
-            </div>
-            <div className="filter-dropdown">
-              <span>Month</span>
-              <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
-                <option value="All">All</option>
-                <option value="1">January</option><option value="2">February</option>
-                <option value="3">March</option><option value="4">April</option>
-                <option value="5">May</option><option value="6">June</option>
-                <option value="7">July</option><option value="8">August</option>
-                <option value="9">September</option><option value="10">October</option>
-                <option value="11">November</option><option value="12">December</option>
-              </select>
-              <ChevronDown size={14} className="dropdown-icon" />
-            </div>
+          <h2 className="history-title">Request Visit History</h2>
+          <div className="date-filter-pill">
+            <CalendarIcon size={16} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="date-picker-input"
+            />
+            {selectedDate && (
+              <button
+                className="clear-date-btn"
+                onClick={() => setSelectedDate('')}
+                title="Clear filter"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -72,13 +128,17 @@ const History = () => {
                 <th>Date</th>
                 <th>Time</th>
                 <th>Status</th>
-                <th>Processed By</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.length === 0 ? (
                 <tr className="empty-row">
-                  <td colSpan="7">No visit history found.</td>
+                  <td colSpan="7">
+                    {selectedDate
+                      ? `No visits found for ${formatDisplayDate(selectedDate)}`
+                      : 'No visit history found.'}
+                  </td>
                 </tr>
               ) : (
                 filteredData.map((item) => (
@@ -87,13 +147,17 @@ const History = () => {
                     <td className="guest-email">{item.email}</td>
                     <td className="purpose-cell">{item.reason}</td>
                     <td>{new Date(item.visit_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                    <td>{item.visit_time.substring(0,5)}</td>
+                    <td>{formatTime(item.visit_time)}</td>
                     <td>
                       <span className={`status-badge ${item.status.toLowerCase()}`}>
                         {item.status}
                       </span>
                     </td>
-                    <td className="admin-name">{item.admin_name ? `Admin ${item.admin_name}` : 'System'}</td>
+                    <td>
+                      <button className="action-eye" onClick={() => openDetails(item)}>
+                        <Eye size={18} />
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -101,6 +165,43 @@ const History = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal (unchanged) */}
+      <FormalModal
+        show={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        title="Appointment Details"
+        size="medium"
+        footer={
+          <>
+            <button className="btn-modal-cancel" onClick={() => setShowDetailModal(false)}>Close</button>
+            {!isPastAppointment && (
+              <button className="btn-modal-submit" onClick={handleUpdate} disabled={updating}>
+                {updating ? 'Saving...' : 'Save Changes'}
+              </button>
+            )}
+          </>
+        }
+      >
+        {selectedAppointment && (
+          <div className="appointment-details">
+            <div className="detail-row"><strong>Name:</strong> {selectedAppointment.first_name} {selectedAppointment.last_name}</div>
+            <div className="detail-row"><strong>Email:</strong> {selectedAppointment.email}</div>
+            {selectedAppointment.phone && <div className="detail-row"><strong>Phone:</strong> {selectedAppointment.phone}</div>}
+            <div className="detail-row"><strong>Purpose:</strong> {selectedAppointment.reason}</div>
+            <div className="detail-row"><strong>Status:</strong> <span className={`status-badge ${selectedAppointment.status.toLowerCase()}`}>{selectedAppointment.status}</span></div>
+            {isPastAppointment ? (
+              <div className="detail-row read-only-message">This appointment is in the past and cannot be edited.</div>
+            ) : (
+              <div className="detail-row edit-fields">
+                <div className="edit-field"><label><Calendar size={14} /> Date</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} min={new Date().toISOString().split('T')[0]} /></div>
+                <div className="edit-field"><label><Clock size={14} /> Time</label><input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} /></div>
+              </div>
+            )}
+            {selectedAppointment.admin_notes && <div className="detail-row"><strong>Admin Notes:</strong> {selectedAppointment.admin_notes}</div>}
+          </div>
+        )}
+      </FormalModal>
     </div>
   );
 };

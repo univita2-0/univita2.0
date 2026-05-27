@@ -1,18 +1,13 @@
 // src/screens/ScheduleHistoryScreen.js
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator
+  View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, StatusBar
 } from 'react-native';
-import { X } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { X, Calendar, Clock } from 'lucide-react-native';
 
 export default function ScheduleHistoryScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [scheduleHistory, setScheduleHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,8 +16,7 @@ export default function ScheduleHistoryScreen({ navigation }) {
   }, []);
 
   const loadHistory = async () => {
-    // In a real app, fetch from backend endpoint
-    // For now, use mock data (could be stored in AsyncStorage)
+    // In a real app, fetch from backend
     const mockData = [
       { id: 1, date: '2025-03-20', start: '09:00', end: '12:00', status: 'Pending' },
       { id: 2, date: '2025-03-15', start: '13:00', end: '17:00', status: 'Approved' },
@@ -46,33 +40,42 @@ export default function ScheduleHistoryScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <X size={24} color="#0f172a" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Schedule Requests History</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <X size={24} color="#0f172a" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Schedule History</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-      <FlatList
-        data={scheduleHistory}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.historyItem}>
-            <Text style={styles.historyDate}>{item.date}</Text>
-            <Text style={styles.historyTime}>{item.start} – {item.end}</Text>
-            <Text style={[styles.historyStatus, { color: getStatusColor(item.status) }]}>
-              {item.status}
-            </Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No schedule requests found.</Text>
-        }
-      />
-    </SafeAreaView>
+        <FlatList
+          data={scheduleHistory}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <View style={styles.historyCard}>
+              <View style={styles.cardHeader}>
+                <Calendar size={16} color="#00897B" />
+                <Text style={styles.date}>{item.date}</Text>
+              </View>
+              <View style={styles.cardBody}>
+                <Clock size={14} color="#64748B" />
+                <Text style={styles.time}>{item.start} – {item.end}</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}15` }]}>
+                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                  {item.status.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={styles.emptyText}>No schedule requests found.</Text>}
+        />
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -92,16 +95,19 @@ const styles = StyleSheet.create({
   backButton: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   list: { padding: 16 },
-  historyItem: {
-    backgroundColor: 'white',
+  historyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: 16,
-    borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  historyDate: { fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 4 },
-  historyTime: { fontSize: 13, color: '#475569', marginBottom: 6 },
-  historyStatus: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  date: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  cardBody: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  time: { fontSize: 13, color: '#475569' },
+  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  statusText: { fontSize: 11, fontWeight: '700' },
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 50 },
 });

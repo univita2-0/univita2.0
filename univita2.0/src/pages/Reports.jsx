@@ -1,4 +1,6 @@
+// src/pages/Reports.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import './Reports.css';
 import {
   Download, Users, Calendar, DollarSign, PieChart,
@@ -8,8 +10,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, PieChart as RPieChart, Pie, Cell
 } from 'recharts';
+import { API_BASE } from '../api';
 
-const API_BASE = 'http://localhost:5000/api';
+const getAuthHeaders = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+});
 
 const Reports = () => {
   const [selectedReport, setSelectedReport] = useState('attendance');
@@ -26,11 +31,8 @@ const Reports = () => {
   const [visitorStats, setVisitorStats] = useState({ approved: 0, rejected: 0, pending: 0 });
   const [scheduleData, setScheduleData] = useState([]);
   const [visitorList, setVisitorList] = useState([]);
-  // Appeals data
   const [pendingAppeals, setPendingAppeals] = useState([]);
   const [historyAppeals, setHistoryAppeals] = useState([]);
-
-  const token = localStorage.getItem('auth_token') || '';
 
   const availableMonths = useMemo(() => {
     const months = [];
@@ -43,8 +45,6 @@ const Reports = () => {
     }
     return months;
   }, []);
-
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,10 +71,12 @@ const Reports = () => {
 
   const fetchAttendanceData = async () => {
     const [month, year] = selectedMonth.split('-');
-    const res = await fetch(`${API_BASE}/attendance-monthly?month=${month}&year=${year}`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch attendance data');
-    const data = await res.json();
-    setAttendanceData((data || []).map(e => ({
+    const res = await axios.get(`${API_BASE}/attendance-monthly`, {
+      params: { month, year },
+      ...getAuthHeaders()
+    });
+    const data = res.data || [];
+    setAttendanceData(data.map(e => ({
       ...e,
       regular_hours: Number(e.regular_hours) || 0,
       overtime_hours: Number(e.overtime_hours) || 0,
@@ -83,9 +85,8 @@ const Reports = () => {
   };
 
   const fetchPayrollData = async () => {
-    const res = await fetch(`${API_BASE}/payroll/history`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch payroll data');
-    const all = await res.json();
+    const res = await axios.get(`${API_BASE}/payroll/history`, getAuthHeaders());
+    const all = res.data || [];
     const target = new Date(selectedMonth + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     setPayrollData(all.filter(p => p.month_year === target));
   };
@@ -95,11 +96,11 @@ const Reports = () => {
     const start = `${year}-${month}-01`;
     const end = new Date(year, month, 0).toISOString().split('T')[0];
     const [histRes, pendRes] = await Promise.all([
-      fetch(`${API_BASE}/appointments/history`, { headers }),
-      fetch(`${API_BASE}/appointments/pending`, { headers })
+      axios.get(`${API_BASE}/appointments/history`, getAuthHeaders()),
+      axios.get(`${API_BASE}/appointments/pending`, getAuthHeaders())
     ]);
-    const history = await histRes.json();
-    const pending = await pendRes.json();
+    const history = histRes.data || [];
+    const pending = pendRes.data || [];
     const monthHist = history.filter(v => v.visit_date >= start && v.visit_date <= end);
     const monthPend = pending.filter(v => v.visit_date >= start && v.visit_date <= end);
     setVisitorStats({
@@ -111,42 +112,35 @@ const Reports = () => {
   };
 
   const fetchSchedulingData = async () => {
-    const res = await fetch(`${API_BASE}/schedules`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch schedules');
-    const all = await res.json();
+    const res = await axios.get(`${API_BASE}/schedules`, getAuthHeaders());
+    const all = res.data || [];
     setScheduleData(all.filter(s => s.schedule_date && s.schedule_date.startsWith(selectedMonth)));
   };
 
   const fetchAppealsData = async () => {
     const [pendingRes, historyRes] = await Promise.all([
-      fetch(`${API_BASE}/attendance-appeals/pending`, { headers }),
-      fetch(`${API_BASE}/attendance-appeals/history`, { headers })
+      axios.get(`${API_BASE}/attendance-appeals/pending`, getAuthHeaders()),
+      axios.get(`${API_BASE}/attendance-appeals/history`, getAuthHeaders())
     ]);
-    if (!pendingRes.ok || !historyRes.ok) throw new Error('Failed to fetch appeals');
-    const pending = await pendingRes.json();
-    const history = await historyRes.json();
-    setPendingAppeals(pending);
-    setHistoryAppeals(history);
+    setPendingAppeals(pendingRes.data || []);
+    setHistoryAppeals(historyRes.data || []);
   };
 
   const handleExport = () => window.print();
 
-  // ---------- SCREEN renderers ----------
+  // ---------- Screen renderers ----------
   const renderAttendanceReport = () => {
-    const totalReg = attendanceData.reduce((s, e) => s + (e.regular_hours || 0), 0);
-    const totalOver = attendanceData.reduce((s, e) => s + (e.overtime_hours || 0), 0);
-    const totalLeave = attendanceData.reduce((s, e) => s + (e.leave_days || 0), 0);
+    const totalReg = attendanceData.reduce((s, e) => s + e.regular_hours, 0);
+    const totalLeave = attendanceData.reduce((s, e) => s + e.leave_days, 0);
     const chart = attendanceData.map(e => ({
       name: e.full_name?.split(' ')[0] || e.employee_id,
-      'Regular Hours': e.regular_hours || 0,
-      'Overtime Hours': e.overtime_hours || 0
+      'Regular Hours': e.regular_hours,
     }));
     return (
       <div className="screen-only">
         <div className="report-stats-row">
           <StatBox label="Total Regular Hrs" value={totalReg.toFixed(1)} icon={<Clock />} />
-          <StatBox label="Total Overtime Hrs" value={totalOver.toFixed(1)} icon={<TrendingUp />} />
-          <StatBox label="Leave Days" value={totalLeave} icon={<FileText />} />
+          <StatBox label="Total Leave Days" value={totalLeave} icon={<FileText />} />
           <StatBox label="Employees" value={attendanceData.length} icon={<Users />} />
         </div>
         <div className="chart-card">
@@ -158,9 +152,7 @@ const Reports = () => {
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
-                <Legend />
-                <Bar dataKey="Regular Hours" fill="#3B82F6" />
-                <Bar dataKey="Overtime Hours" fill="#F97316" />
+                <Bar dataKey="Regular Hours" fill="#00897B" />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -241,14 +233,13 @@ const Reports = () => {
   const renderScheduleReport = () => {
     const total = scheduleData.length;
     const uniq = new Set(scheduleData.map(s => s.employee_id)).size;
-    const upc = scheduleData.filter(s => new Date(s.schedule_date) >= new Date()).length;
+    const upcoming = scheduleData.filter(s => new Date(s.schedule_date) >= new Date()).length;
     return (
       <div className="screen-only">
         <div className="report-stats-row">
           <StatBox label="Total Schedules" value={total} icon={<Calendar />} />
           <StatBox label="Unique Employees" value={uniq} icon={<Users />} />
-          <StatBox label="Upcoming" value={upc} icon={<Clock />} />
-          <StatBox label="Coverage" value={`${total ? Math.round((uniq/8)*100) : 0}%`} icon={<TrendingUp />} />
+          <StatBox label="Upcoming" value={upcoming} icon={<Clock />} />
         </div>
         <div className="chart-card">
           <h3>Schedule Overview</h3>
@@ -256,7 +247,7 @@ const Reports = () => {
             <div className="simple-table">
               <table className="custom-table">
                 <thead><tr><th>Date</th><th>Employee</th><th>Course</th><th>Location</th></tr></thead>
-                <tbody>{scheduleData.slice(0,20).map((s,i)=>( <tr key={i}><td>{s.schedule_date}</td><td>{s.full_name}</td><td>{s.course}</td><td>{s.place}</td></tr>))}</tbody>
+                <tbody>{scheduleData.slice(0,20).map((s,i)=> <tr key={i}><td>{s.schedule_date}</td><td>{s.full_name}</td><td>{s.course}</td><td>{s.place}</td></tr>)}</tbody>
               </table>
             </div>
           )}
@@ -285,9 +276,7 @@ const Reports = () => {
         </div>
         <div className="chart-card">
           <h3>Appeal Status Overview</h3>
-          {pendingCount + approvedCount + rejectedCount === 0 ? (
-            <p className="empty-text">No appeals data</p>
-          ) : (
+          {pendingCount + approvedCount + rejectedCount === 0 ? <p className="empty-text">No appeals data</p> : (
             <ResponsiveContainer width="100%" height={300}>
               <RPieChart>
                 <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
@@ -305,15 +294,7 @@ const Reports = () => {
             <div className="simple-table">
               <table className="custom-table">
                 <thead><tr><th>Date</th><th>Employee</th><th>Reason</th></tr></thead>
-                <tbody>
-                  {pendingAppeals.slice(0, 10).map(a => (
-                    <tr key={a.id}>
-                      <td>{a.date}</td>
-                      <td>{a.full_name} ({a.employee_id})</td>
-                      <td>{a.reason.substring(0, 60)}...</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <tbody>{pendingAppeals.slice(0, 10).map(a => <tr key={a.id}><td>{a.date}</td><td>{a.full_name} ({a.employee_id})</td><td>{a.reason.substring(0, 60)}...</td></tr>)}</tbody>
               </table>
             </div>
           )}
@@ -322,7 +303,7 @@ const Reports = () => {
     );
   };
 
-  // ---------- PRINTABLE REPORTS (formal) ----------
+  // ---------- Printable reports (unchanged but now working) ----------
   const PrintableHeader = () => (
     <div className="company-header">
       <h1>HCT ACADEMY</h1>
@@ -331,28 +312,18 @@ const Reports = () => {
     </div>
   );
 
-  const renderPrintableAttendance = () => {
-    const wd = 22;
-    return (
-      <div className="print-only printable-report">
-        <PrintableHeader />
-        <h2 className="print-report-title">ATTENDANCE REPORT</h2>
-        <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
-        <table className="formal-table">
-          <thead><tr><th>Sr.</th><th>ID</th><th>Name</th><th>Work Days</th><th>Present</th><th>Absent</th><th>Leave</th><th>%</th></tr></thead>
-          <tbody>
-            {attendanceData.map((emp,i)=>{
-              const present = emp.regular_hours>0?1:0;
-              const absent = present?0:1;
-              const pct = ((present/wd)*100).toFixed(1);
-              return(<tr key={i}><td>{i+1}</td><td>{emp.employee_id}</td><td>{emp.full_name}</td><td>{wd}</td><td>{present}</td><td>{absent}</td><td>{emp.leave_days||0}</td><td>{pct}%</td></tr>);
-            })}
-          </tbody>
-        </table>
-        <div className="signatures"><div>Prepared: HR</div><div>Reviewed: HR Manager</div><div>Approved: Head Admin</div></div>
-      </div>
-    );
-  };
+  const renderPrintableAttendance = () => (
+    <div className="print-only printable-report">
+      <PrintableHeader />
+      <h2 className="print-report-title">ATTENDANCE REPORT</h2>
+      <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
+      <table className="formal-table">
+        <thead><tr><th>Sr.</th><th>ID</th><th>Name</th><th>Regular Hrs</th><th>Leave Days</th></tr></thead>
+        <tbody>{attendanceData.map((emp,i)=><tr key={i}><td>{i+1}</td><td>{emp.employee_id}</td><td>{emp.full_name}</td><td>{emp.regular_hours.toFixed(1)}</td><td>{emp.leave_days}</td></tr>)}</tbody>
+      </table>
+      <div className="signatures"><div>Prepared: HR</div><div>Reviewed: HR Manager</div><div>Approved: Head Admin</div></div>
+    </div>
+  );
 
   const renderPrintablePayroll = () => (
     <div className="print-only printable-report">
@@ -360,10 +331,8 @@ const Reports = () => {
       <h2 className="print-report-title">PAYROLL REPORT</h2>
       <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
       <table className="formal-table">
-        <thead><tr><th>Sr.</th><th>ID</th><th>Name</th><th>Gross</th><th>Tax</th><th>SSS</th><th>PhilHealth</th><th>PagIBIG</th><th>Other Ded.</th><th>Net</th></tr></thead>
-        <tbody>
-          {payrollData.map((p,i)=>(<tr key={i}><td>{i+1}</td><td>{p.employee_id||p.user_id}</td><td>{p.full_name}</td><td>{Number(p.gross_pay).toLocaleString()}</td><td>{Number(p.tax_deduction).toLocaleString()}</td><td>{Number(p.sss_deduction).toLocaleString()}</td><td>{Number(p.philhealth_deduction).toLocaleString()}</td><td>{Number(p.pagibig_deduction).toLocaleString()}</td><td>{Number(p.loan_deduction + p.other_deduction).toLocaleString()}</td><td>{Number(p.net_pay).toLocaleString()}</td></tr>))}
-        </tbody>
+        <thead><tr><th>Sr.</th><th>ID</th><th>Name</th><th>Gross</th><th>Tax</th><th>Net</th></tr></thead>
+        <tbody>{payrollData.map((p,i)=><tr key={i}><td>{i+1}</td><td>{p.employee_id||p.user_id}</td><td>{p.full_name}</td><td>₱{Number(p.gross_pay).toLocaleString()}</td><td>₱{Number(p.tax_deduction).toLocaleString()}</td><td>₱{Number(p.net_pay).toLocaleString()}</td></tr>)}</tbody>
       </table>
       <div className="signatures"><div>Prepared: HR</div><div>Reviewed: Finance</div><div>Approved: Director</div></div>
     </div>
@@ -375,8 +344,8 @@ const Reports = () => {
       <h2 className="print-report-title">VISITOR REPORT</h2>
       <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
       <table className="formal-table">
-        <thead><tr><th>Sr.</th><th>Name</th><th>Email</th><th>Date</th><th>Reason</th><th>Status</th></tr></thead>
-        <tbody>{visitorList.map((v,i)=>(<tr key={i}><td>{i+1}</td><td>{v.first_name} {v.last_name}</td><td>{v.email}</td><td>{v.visit_date}</td><td>{v.reason}</td><td>{v.status}</td></tr>))}</tbody>
+        <thead><tr><th>Sr.</th><th>Name</th><th>Date</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>{visitorList.map((v,i)=><tr key={i}><td>{i+1}</td><td>{v.first_name} {v.last_name}</td><td>{v.visit_date}</td><td>{v.reason}</td><td>{v.status}</td></tr>)}</tbody>
       </table>
       <div className="signatures"><div>Prepared: Security</div><div>Reviewed: Facility Manager</div></div>
     </div>
@@ -389,7 +358,7 @@ const Reports = () => {
       <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
       <table className="formal-table">
         <thead><tr><th>Sr.</th><th>Date</th><th>Instructor</th><th>Course</th><th>Location</th><th>Start</th><th>End</th></tr></thead>
-        <tbody>{scheduleData.map((s,i)=>(<tr key={i}><td>{i+1}</td><td>{s.schedule_date}</td><td>{s.full_name}</td><td>{s.course}</td><td>{s.place}</td><td>{s.start_time?.substring(0,5)}</td><td>{s.end_time?.substring(0,5)}</td></tr>))}</tbody>
+        <tbody>{scheduleData.map((s,i)=><tr key={i}><td>{i+1}</td><td>{s.schedule_date}</td><td>{s.full_name}</td><td>{s.course}</td><td>{s.place}</td><td>{s.start_time?.substring(0,5)}</td><td>{s.end_time?.substring(0,5)}</td></tr>)}</tbody>
       </table>
       <div className="signatures"><div>Prepared: HR</div><div>Approved: Academics</div></div>
     </div>
@@ -402,24 +371,12 @@ const Reports = () => {
       <p className="print-subtitle">{availableMonths.find(m=>m.value===selectedMonth)?.label}</p>
       <table className="formal-table">
         <thead><tr><th>Sr.</th><th>Employee</th><th>Date</th><th>Reason</th><th>Status</th><th>Remarks</th></tr></thead>
-        <tbody>
-          {[...pendingAppeals, ...historyAppeals].slice(0, 50).map((a,i) => (
-            <tr key={i}>
-              <td>{i+1}</td>
-              <td>{a.full_name} ({a.employee_id})</td>
-              <td>{a.date}</td>
-              <td>{a.reason}</td>
-              <td className={a.status === 'pending' ? 'text-warning' : (a.status === 'approved' ? 'text-success' : 'text-danger')}>{a.status.toUpperCase()}</td>
-              <td>{a.admin_remarks || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
+        <tbody>{[...pendingAppeals, ...historyAppeals].slice(0,50).map((a,i)=><tr key={i}><td>{i+1}</td><td>{a.full_name} ({a.employee_id})</td><td>{a.date}</td><td>{a.reason}</td><td className={a.status}>{a.status.toUpperCase()}</td><td>{a.admin_remarks||'—'}</td></tr>)}</tbody>
       </table>
       <div className="signatures"><div>Prepared: HR</div><div>Reviewed: HR Manager</div></div>
     </div>
   );
 
-  // ---------- MAIN RENDER ----------
   return (
     <div className="reports-container">
       <div className="reports-control-bar">
@@ -448,7 +405,7 @@ const Reports = () => {
       </div>
 
       <div className="report-content-area screen-only">
-        {loading ? <div className="report-loader">⏳ Loading...</div> :
+        {loading ? <div className="report-loader">Loading data...</div> :
          error ? <div className="error-message">Error: {error}</div> :
          <>
            <div className="current-report-header">
@@ -470,7 +427,7 @@ const Reports = () => {
         }
       </div>
 
-      {/* Printable content (hidden on screen, printed) */}
+      {/* Printable content – hidden on screen */}
       {selectedReport==='attendance' && renderPrintableAttendance()}
       {selectedReport==='payroll' && renderPrintablePayroll()}
       {selectedReport==='visitor' && renderPrintableVisitor()}

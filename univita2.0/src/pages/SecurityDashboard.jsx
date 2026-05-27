@@ -173,11 +173,11 @@ const SecurityDashboard = ({ setView }) => {
               <span>Live Visitor Tracking</span>
               <ChevronRight size={16} />
             </button>
-            <button className="action-row" onClick={() => handleNavigate('visitor-history')}>
+            <button className="action-row" onClick={() => handleNavigate('completed-visits')}>
               <span>View Visitor History</span>
               <ChevronRight size={16} />
             </button>
-            <button className="action-row" onClick={() => handleNavigate('manage-ble-tags')}>
+            <button className="action-row" onClick={() => handleNavigate('manage-ble')}>
               <span>Manage BLE Tags</span>
               <ChevronRight size={16} />
             </button>

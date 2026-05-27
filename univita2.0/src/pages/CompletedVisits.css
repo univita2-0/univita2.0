@@ -1,0 +1,145 @@
+/* src/pages/CompletedVisits.css */
+.completed-visits-container {
+  padding: 1.5rem;
+  background: #f8fafc;
+  min-height: calc(100vh - 80px);
+}
+
+.cv-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  color: #0f172a;
+}
+
+.cv-header p {
+  color: #64748b;
+  margin-bottom: 1.5rem;
+}
+
+.cv-filters {
+  background: white;
+  border-radius: 16px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.date-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.filter-group label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.date-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.btn-search, .btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-search {
+  background: #00897b;
+  color: white;
+}
+
+.btn-search:hover:not(:disabled) {
+  background: #00695c;
+}
+
+.btn-export {
+  background: #1e293b;
+  color: white;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: #0f172a;
+}
+
+.btn-search:disabled, .btn-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cv-table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.cv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cv-table th {
+  text-align: left;
+  padding: 1rem;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cv-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.small-text {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.duration-badge {
+  display: inline-block;
+  background: #e0f2f1;
+  color: #00897b;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.loading-state, .empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #64748b;
+  background: white;
+  border-radius: 16px;
+}
+
+.empty-state svg {
+  color: #cbd5e1;
+  margin-bottom: 1rem;
+}
