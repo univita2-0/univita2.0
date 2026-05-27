@@ -10,11 +10,24 @@ const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
 });
 
+// Helper: format ISO date to YYYY-MM-DD
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  // If already YYYY-MM-DD, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // Otherwise parse ISO
+  return dateStr.split('T')[0];
+};
+
+// Helper: format time from HH:MM:SS to HH:MM
+const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  return timeStr.substring(0, 5);
+};
+
 const OvertimeRequests = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyRequests, setHistoryRequests] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -109,10 +122,10 @@ const OvertimeRequests = () => {
               {requests.map(req => (
                 <tr key={req.id}>
                   <td>{req.full_name} ({req.employee_id})</td>
-                  <td>{req.date}</td>
+                  <td>{formatDate(req.date)}</td>
                   <td>{getScenarioLabel(req.scenario_type)}</td>
-                  <td>{req.start_time}</td>
-                  <td>{req.end_time}</td>
+                  <td>{formatTime(req.start_time)}</td>
+                  <td>{formatTime(req.end_time)}</td>
                   <td>{req.reason}</td>
                   <td>
                     {req.attachment ? (
@@ -120,7 +133,7 @@ const OvertimeRequests = () => {
                         View
                       </a>
                     ) : '—'}
-                   </td>
+                  </td>
                   <td className="ot-actions">
                     <button className="ot-approve" onClick={() => handleAction(req.id, 'approved')}>
                       <CheckCircle size={18} /> Approve
@@ -169,9 +182,9 @@ const OvertimeRequests = () => {
                   <tr key={req.id}>
                     <td>{req.id}</td>
                     <td>{req.full_name}<br/><span className="emp-id-small">{req.employee_id}</span></td>
-                    <td>{req.date}</td>
+                    <td>{formatDate(req.date)}</td>
                     <td>{getScenarioLabel(req.scenario_type)}</td>
-                    <td>{req.start_time} – {req.end_time}</td>
+                    <td>{formatTime(req.start_time)} – {formatTime(req.end_time)}</td>
                     <td className="reason-cell">{req.reason}</td>
                     <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status?.toUpperCase()}</span></td>
                     <td>{req.processed ? '✓ Yes' : '❌ No'}</td>

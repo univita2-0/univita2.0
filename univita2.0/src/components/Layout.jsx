@@ -17,22 +17,18 @@ const menuConfig = [
     path: 'dashboard',
     roles: ['admin', 'hr_admin', 'security']
   },
-  {
+   {
     id: 'recruitment',
     label: 'Recruitment',
     icon: <Briefcase size={20} />,
-    submenu: [
-      { id: 'job-postings', label: 'Job Postings', path: 'job-postings', roles: ['hr_admin'] }
-    ],
+    path: 'job-postings',
     roles: ['hr_admin']
   },
-  {
+ {
     id: 'employees',
     label: 'Employees',
     icon: <Users size={20} />,
-    submenu: [
-      { id: 'employee-list', label: 'Employee List', path: 'employee-management', roles: ['admin', 'hr_admin'] },
-    ],
+    path: 'employee-management',
     roles: ['admin', 'hr_admin']
   },
   {
@@ -43,20 +39,23 @@ const menuConfig = [
       { id: 'daily-attendance', label: 'Daily Attendance', path: 'attendance', roles: ['admin', 'hr_admin'] },
       { id: 'attendance-correction', label: 'Attendance Correction', path: 'attendance-correction', roles: ['admin', 'hr_admin'] },
       { id: 'attendance-appeals', label: 'Attendance Appeals', path: 'attendance-appeals', roles: ['admin', 'hr_admin'] },
-      { id: 'overtime-requests', label: 'Overtime Requests', path: 'overtime-requests', roles: ['admin', 'hr_admin'] },
       { id: 'location-tracking', label: 'Location Tracking', path: 'location-tracking', roles: ['admin', 'hr_admin'] }
     ],
     roles: ['admin', 'hr_admin']
   },
+ {
+    id: 'payroll-summary',
+    label: 'Payroll Summary',
+    icon: <Wallet size={20} />,
+    path: 'payroll-summary',
+    roles: ['admin']
+  },
   {
-    id: 'payroll',
+    id: 'salary-list',
     label: 'Payroll',
     icon: <Wallet size={20} />,
-    submenu: [
-      { id: 'salary-list', label: 'Salary List', path: 'payroll-main', roles: ['hr_admin'] },
-      { id: 'payroll-summary', label: 'Payroll Summary', path: 'payroll-summary', roles: ['admin'] },
-    ],
-    roles: ['admin', 'hr_admin']
+    path: 'payroll-main',
+    roles: ['hr_admin']
   },
   {
     id: 'leave-management',

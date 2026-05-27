@@ -4,7 +4,7 @@ import {
   Mail, Phone, MapPin, Clock, Calendar, User, MessageSquare,
   Award, Users, Plus, Trash2, ShieldCheck, Info, Menu, X,
   Stethoscope, GraduationCap, Building2, Check, ArrowRight,
-  Briefcase, FileText, Upload, Camera, BookOpen
+  Briefcase, FileText, Upload, Camera, BookOpen, ChevronDown, ChevronUp, DollarSign
 } from 'lucide-react';
 import { API_BASE } from '../api';
 import './AppointmentPage.css';
@@ -26,6 +26,12 @@ const AppointmentPage = ({ onAdminLogin }) => {
   const [jobs, setJobs] = useState([]);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [expandedJobId, setExpandedJobId] = useState(null); 
+  
+  // ---- Job Details Modal state ----
+  const [showJobDetailsModal, setShowJobDetailsModal] = useState(false);
+  const [selectedJobDetails, setSelectedJobDetails] = useState(null);
+
   const [applicationForm, setApplicationForm] = useState({ full_name: '', email: '', phone: '', cover_letter: '', resume: null });
   const [submittingApplication, setSubmittingApplication] = useState(false);
 
@@ -87,7 +93,6 @@ const AppointmentPage = ({ onAdminLogin }) => {
         date: formData.date, time: formData.time,
         reason: formData.message, 
         additionalVisitors: isMultipleVisitors ? additionalVisitors : []
-        // Notice: BLE Data is entirely removed from the payload. The guard handles this upon arrival.
       };
       
       await axios.post(`${API_BASE}/appointments/book`, payload);
@@ -153,7 +158,6 @@ const AppointmentPage = ({ onAdminLogin }) => {
     }
   };
 
-  // ---- Sample course list (unchanged) ----
   const sampleCourses = [
     "Bachelor of Science in Nursing",
     "Bachelor of Science in Medical Technology",
@@ -346,12 +350,38 @@ const AppointmentPage = ({ onAdminLogin }) => {
               ) : (
                 <div className="job-cards-grid">
                   {jobs.map(job => (
-                    <div key={job.id} className="job-card">
+                    <div key={job.id} className="job-card" style={{ display: 'flex', flexDirection: 'column' }}>
                       <div className="job-card-icon"><Briefcase size={24} /></div>
+                      
                       <h3>{job.title}</h3>
-                      <div className="job-meta"><span><Building2 size={14} /> {job.department || 'General'}</span><span><Clock size={14} /> {job.employment_type}</span></div>
-                      <p className="job-description">{job.description.substring(0, 120)}...</p>
-                      <button className="btn-primary small" onClick={() => openApplyModal(job)}><FileText size={16} /> Apply Now</button>
+                      <div className="job-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                        <span><Building2 size={14} /> {job.department || 'General'}</span>
+                        <span><Clock size={14} /> {job.employment_type}</span>
+                      </div>
+                      
+                      <p className="job-description">
+                        {job.description?.length > 120 ? `${job.description.substring(0, 120)}...` : job.description}
+                      </p>
+                      
+                      <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', paddingTop: '15px' }}>
+                        <button 
+                          className="btn-secondary small" 
+                          onClick={() => { 
+                            setSelectedJobDetails(job); 
+                            setShowJobDetailsModal(true); 
+                          }}
+                          style={{ flex: 1, padding: '0.7rem', fontSize: '0.9rem', justifyContent: 'center' }}
+                        >
+                          See Details
+                        </button>
+                        <button 
+                          className="btn-primary small" 
+                          onClick={() => openApplyModal(job)}
+                          style={{ flex: 1, padding: '0.7rem', fontSize: '0.9rem', justifyContent: 'center' }}
+                        >
+                          <FileText size={16} /> Apply
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -381,6 +411,125 @@ const AppointmentPage = ({ onAdminLogin }) => {
         <div className="footer-bottom"><p>© 2025 HCT Academy. All rights reserved.</p></div>
       </footer>
 
+      {/* FORMAL JOB DETAILS MODAL */}
+      {showJobDetailsModal && selectedJobDetails && (
+        <div className="modal-overlay" onClick={() => setShowJobDetailsModal(false)}>
+          {/* Overriding the default padding to allow edge-to-edge header */}
+          <div className="apply-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '750px', padding: '0', overflow: 'hidden' }}>
+            
+            {/* Branded Formal Header */}
+            <div style={{ background: '#00897B', color: 'white', padding: '30px', position: 'relative' }}>
+              <button 
+                className="btn-close-modal" 
+                onClick={() => setShowJobDetailsModal(false)}
+                style={{ position: 'absolute', top: '20px', right: '20px', color: 'white', opacity: 0.8, background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={24} />
+              </button>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: '700', marginBottom: '10px', color: 'white' }}>
+                {selectedJobDetails.title}
+              </h2>
+              <div style={{ display: 'flex', gap: '15px', fontSize: '0.95rem', opacity: 0.9, flexWrap: 'wrap' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Building2 size={16}/> {selectedJobDetails.department || 'General Department'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Clock size={16}/> {selectedJobDetails.employment_type}</span>
+              </div>
+            </div>
+
+            {/* Scrollable Content Body */}
+            <div style={{ padding: '30px', textAlign: 'left', maxHeight: '65vh', overflowY: 'auto' }}>
+              
+              {/* Metadata Grid */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                gap: '20px', 
+                marginBottom: '30px', 
+                padding: '20px', 
+                background: '#f8fafc', 
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px' 
+              }}>
+                <div>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Location Type</p>
+                  <p style={{ fontSize: '1rem', color: '#0f172a', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={16} color="#00897B"/> {selectedJobDetails.location_type || 'On-site'}
+                  </p>
+                </div>
+                
+                {selectedJobDetails.location && (
+                  <div>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Specific Location</p>
+                    <p style={{ fontSize: '1rem', color: '#0f172a', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Building2 size={16} color="#00897B"/> {selectedJobDetails.location}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Monthly Salary</p>
+                  <p style={{ fontSize: '1rem', color: '#0f172a', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <DollarSign size={16} color="#00897B"/> 
+                    {(selectedJobDetails.salary_min || selectedJobDetails.salary_max) ? (
+                      <>
+                        {selectedJobDetails.salary_min ? `₱${Number(selectedJobDetails.salary_min).toLocaleString()}` : ''}
+                        {selectedJobDetails.salary_min && selectedJobDetails.salary_max ? ' - ' : ''}
+                        {selectedJobDetails.salary_max ? `₱${Number(selectedJobDetails.salary_max).toLocaleString()}` : ''}
+                      </>
+                    ) : 'Salary not specified'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Job Description */}
+              <div style={{ marginBottom: '30px' }}>
+                <h4 style={{ color: '#0f172a', fontSize: '1.2rem', fontWeight: '700', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #e2e8f0', display: 'inline-block' }}>
+                  Job Description
+                </h4>
+                <p style={{ whiteSpace: 'pre-wrap', color: '#334155', fontSize: '1.05rem', lineHeight: '1.8' }}>
+                  {selectedJobDetails.description}
+                </p>
+              </div>
+
+              {/* Requirements */}
+              {selectedJobDetails.requirements && (
+                <div style={{ marginBottom: '10px' }}>
+                  <h4 style={{ color: '#0f172a', fontSize: '1.2rem', fontWeight: '700', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #e2e8f0', display: 'inline-block' }}>
+                    Requirements & Qualifications
+                  </h4>
+                  <p style={{ whiteSpace: 'pre-wrap', color: '#334155', fontSize: '1.05rem', lineHeight: '1.8' }}>
+                    {selectedJobDetails.requirements}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Formal Footer */}
+            <div style={{ padding: '20px 30px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+              <button 
+                type="button" 
+                className="btn-cancel" 
+                onClick={() => setShowJobDetailsModal(false)}
+                style={{ padding: '0.8rem 1.5rem', fontWeight: '600' }}
+              >
+                Close
+              </button>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={() => {
+                  setShowJobDetailsModal(false);
+                  openApplyModal(selectedJobDetails);
+                }}
+                style={{ padding: '0.8rem 2rem', fontSize: '1.05rem' }}
+              >
+                <FileText size={18} style={{marginRight: '8px'}} /> Apply for this Job
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* APPOINTMENT MODAL */}
       {showAppointmentModal && (
         <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
@@ -390,7 +539,6 @@ const AppointmentPage = ({ onAdminLogin }) => {
               <button className="btn-close-modal" onClick={() => setShowAppointmentModal(false)}><X size={24} /></button>
             </div>
             <form onSubmit={handleSubmit}>
-              
               <div className="form-row">
                 <div className="form-group"><label><User size={16} /> Full Name </label><input type="text" name="name" placeholder="Juan Dela Cruz" value={formData.name} onChange={handleChange} required /></div>
                 <div className="form-group"><label><Mail size={16} /> Email </label><input type="email" name="email" placeholder="juan@example.com" value={formData.email} onChange={handleChange} required /></div>
@@ -399,7 +547,6 @@ const AppointmentPage = ({ onAdminLogin }) => {
               <div className="form-row">
                 <div className="form-group"><label><Phone size={16} /> Phone</label><input type="tel" name="phone" placeholder="+63 912 345 6789" value={formData.phone} onChange={handleChange} /></div>
                 
-                {/* NEW: Dynamic Reason Dropdown instead of BLE Tag */}
                 <div className="form-group">
                   <label><MessageSquare size={16} /> Reason for Visit </label>
                   <select name="message" value={formData.message} onChange={handleChange} required>
@@ -425,7 +572,6 @@ const AppointmentPage = ({ onAdminLogin }) => {
                   <div className="companions-info"><Info size={16} />Please list the names of your companions.</div>
                   {additionalVisitors.map((v, idx) => (
                     <div key={idx} className="companion-row">
-                      {/* ONLY NAME IS REQUESTED NOW, BLE TAG DROPDOWN REMOVED */}
                       <input type="text" placeholder="Companion Full Name" value={v.name} onChange={e => updateVisitorField(idx, 'name', e.target.value)} required style={{flex: 1}}/>
                       <button type="button" onClick={() => removeVisitorRow(idx)}><Trash2 size={16} /></button>
                     </div>

@@ -67,11 +67,21 @@ const LeaveManagement = () => {
     }
   };
 
-  const formatDateRange = (start, end) => {
-    if (!start) return '';
-    if (start === end) return start;
-    return `${start} – ${end}`;
-  };
+  const formatDateOnly = (isoString) => {
+  if (!isoString) return '';
+  // If already YYYY-MM-DD, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoString)) return isoString;
+  // Otherwise parse ISO
+  return isoString.split('T')[0];
+};
+
+const formatDateRange = (start, end) => {
+  const startStr = formatDateOnly(start);
+  const endStr = formatDateOnly(end);
+  if (!startStr) return '';
+  if (startStr === endStr) return startStr;
+  return `${startStr} – ${endStr}`;
+};
 
   const filteredGroups = groups
     .filter(group =>
@@ -150,7 +160,6 @@ const LeaveManagement = () => {
                   </td>
                   <td>
                     {group.type || 'Leave'} 
-                    {group.type === 'Sick Leave' ? ' 🤒' : group.type === 'Vacation' ? ' 🏖️' : ' 📝'}
                   </td>
                   <td>{formatDateRange(group.start_date, group.end_date)}</td>
                   <td className="text-center">{group.request_count || 1} day(s)</td>

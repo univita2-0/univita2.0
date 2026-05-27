@@ -4,32 +4,40 @@
   padding: 1.5rem;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
+
 .ot-header {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
+
 .ot-header h2 {
   font-size: 1.3rem;
   font-weight: 700;
   color: #0f172a;
 }
+
 .ot-empty {
   text-align: center;
   padding: 2rem;
   color: #64748b;
 }
+
 .ot-table-wrapper {
   overflow-x: auto;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
 }
+
 .ot-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  min-width: 800px;
 }
+
 .ot-table th {
   text-align: left;
   padding: 0.75rem 1rem;
@@ -38,14 +46,17 @@
   color: #334155;
   border-bottom: 1px solid #e2e8f0;
 }
+
 .ot-table td {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #f1f5f9;
 }
+
 .ot-actions {
   display: flex;
   gap: 0.5rem;
 }
+
 .ot-approve, .ot-reject {
   display: inline-flex;
   align-items: center;
@@ -58,28 +69,26 @@
   cursor: pointer;
   transition: all 0.2s;
 }
+
 .ot-approve {
   background-color: #e0f2f1;
   color: #00897b;
 }
+
 .ot-approve:hover {
   background-color: #b2dfdb;
 }
+
 .ot-reject {
   background-color: #ffebee;
   color: #c62828;
 }
+
 .ot-reject:hover {
   background-color: #ffcdd2;
 }
-/* Header with history button */
-.ot-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
+
+/* History button */
 .ot-history-btn {
   margin-left: auto;
   background-color: #f1f5f9;
@@ -94,58 +103,101 @@
   gap: 6px;
   transition: all 0.2s;
 }
+
 .ot-history-btn:hover {
   background-color: #e2e8f0;
 }
 
-/* History modal table */
-.history-table-wrapper {
-  max-height: 500px;
-  overflow-y: auto;
+/* History Modal – Full Width, No Horizontal Scroll */
+.formal-modal-content.modal-wide {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: auto;
+  max-height: 90vh;
+  margin: 0;
+  border-radius: 0;
 }
+
+.formal-modal-overlay {
+  padding: 1rem;
+}
+
+.history-table-wrapper {
+  overflow-x: visible;
+  overflow-y: auto;
+  max-height: 75vh;
+}
+
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  table-layout: auto;
+  white-space: nowrap;
 }
+
 .history-table th,
 .history-table td {
-  padding: 0.6rem;
+  padding: 1rem 1.2rem;
   border-bottom: 1px solid #e2e8f0;
   text-align: left;
   vertical-align: top;
+  white-space: nowrap;
 }
+
 .history-table th {
   background-color: #f8fafc;
-  font-weight: 600;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 0.85rem;
   position: sticky;
   top: 0;
 }
+
 .emp-id-small {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: #64748b;
+  display: block;
+  margin-top: 4px;
 }
+
 .reason-cell {
-  max-width: 200px;
   white-space: normal;
-  word-break: break-word;
+  max-width: 250px;
 }
+
 .status-badge {
   display: inline-block;
-  padding: 0.2rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
+
 .status-approved {
   background-color: #d1fae5;
   color: #065f46;
 }
+
 .status-rejected {
   background-color: #fee2e2;
   color: #991b1b;
 }
+
 .status-pending {
   background-color: #fef3c7;
   color: #92400e;
+}
+
+@media (max-width: 768px) {
+  .formal-modal-content.modal-wide {
+    width: 100vw !important;
+  }
+  .history-table th,
+  .history-table td {
+    padding: 0.6rem;
+    font-size: 0.75rem;
+    white-space: normal;
+  }
 }

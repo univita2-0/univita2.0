@@ -6,24 +6,16 @@ import 'react-toastify/dist/ReactToastify.css';
 import FormalModal from '../components/FormalModal';
 import { API_BASE } from '../api';
 
-// Helper to get auth headers (most admin endpoints require token)
 const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
 });
 
-// Confirmation dialog using toast confirm (custom implementation)
-const confirmAction = (message, onConfirm) => {
-  // You can use window.confirm for simplicity, or create a custom modal.
-  // For better UX with toast, I'll keep window.confirm but replace alerts with toasts.
-  // The user specifically wanted to replace alerts, not necessarily confirm.
-  if (window.confirm(message)) {
-    onConfirm();
-  }
-};
-
 const LocationsManagement = () => {
   const [locations, setLocations] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [deleteTargetName, setDeleteTargetName] = useState('');
   const [editingLocation, setEditingLocation] = useState(null);
   const [locationForm, setLocationForm] = useState({ name: '', latitude: 0, longitude: 0, radius: 200 });
 
@@ -50,16 +42,25 @@ const LocationsManagement = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this location? It may affect existing schedules.")) {
-      try {
-        await axios.delete(`${API_BASE}/school-locations/${id}`, getAuthHeaders());
-        toast.success("Location deleted successfully");
-        loadLocations();
-      } catch (err) {
-        const errorMsg = err.response?.data?.error || "Failed to delete location";
-        toast.error(errorMsg);
-      }
+  const handleDeleteClick = (id, name) => {
+    setDeleteTargetId(id);
+    setDeleteTargetName(name);
+    setShowConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    try {
+      await axios.delete(`${API_BASE}/school-locations/${deleteTargetId}`, getAuthHeaders());
+      toast.success("Location deleted successfully");
+      loadLocations();
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || "Failed to delete location";
+      toast.error(errorMsg);
+    } finally {
+      setShowConfirm(false);
+      setDeleteTargetId(null);
+      setDeleteTargetName('');
     }
   };
 
@@ -114,7 +115,7 @@ const LocationsManagement = () => {
               <td>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <Edit3 size={16} style={{ cursor: 'pointer', color: '#00897B' }} onClick={() => handleEdit(loc)} />
-                  <Trash2 size={16} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDelete(loc.id)} />
+                  <Trash2 size={16} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDeleteClick(loc.id, loc.name)} />
                 </div>
               </td>
             </tr>
@@ -155,6 +156,22 @@ const LocationsManagement = () => {
             <input type="number" className="modal-input" value={locationForm.radius} onChange={e => setLocationForm(prev => ({ ...prev, radius: parseInt(e.target.value) || 200 }))} />
           </div>
         </div>
+      </FormalModal>
+
+      {/* Delete Confirmation Modal */}
+      <FormalModal
+        show={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        title="Delete Location"
+        footer={
+          <>
+            <button className="btn-modal-cancel" onClick={() => setShowConfirm(false)}>Cancel</button>
+            <button className="btn-modal-submit" onClick={confirmDelete} style={{ backgroundColor: '#dc2626' }}>Delete</button>
+          </>
+        }
+      >
+        <p>Are you sure you want to delete the location <strong>"{deleteTargetName}"</strong>?</p>
+        <p className="text-sm text-gray-500 mt-2">This may affect existing schedules and attendance records.</p>
       </FormalModal>
     </div>
   );
